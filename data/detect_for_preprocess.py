@@ -1,4 +1,5 @@
 import sys
+import os
 sys.path.append("./data/yolov5/")
 
 import argparse
@@ -14,8 +15,9 @@ from PIL import Image
 
 from data.yolov5.models.experimental import attempt_load
 from data.yolov5.utils.datasets import LoadStreams, LoadImages
-from data.yolov5.utils.general import check_img_size, non_max_suppression, apply_classifier, scale_coords, xyxy2xywh, \
-    strip_optimizer, set_logging, increment_path
+from data.yolov5.utils.general import check_img_size, non_max_suppression, \
+                                    apply_classifier, scale_coords, xyxy2xywh, \
+                                    strip_optimizer, set_logging, increment_path
 from data.yolov5.utils.plots import plot_one_box
 from data.yolov5.utils.torch_utils import select_device, load_classifier, time_synchronized
 
@@ -30,7 +32,7 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
     agnostic_nms = None
     augment = None
     exist_ok = None
-    save_conf = False
+    save_conf = True
     
     # Initialize
     set_logging()
@@ -45,7 +47,7 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
 
     # Set Dataloader
     vid_path, vid_writer = None, None
-    save_img = False
+    # save_img = False
     dataset = LoadImages(image_path, img_size=imgsz)
 
     # Get names and colors
@@ -57,7 +59,7 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
     _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
 
     all_box_list = []
-    for path, img, im0s, vid_cap in dataset:
+    for path, img, im0s, _ in dataset:
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -72,8 +74,10 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes=classes, agnostic=agnostic_nms)
 
         if save_img:
-            save_dir = Path(increment_path(Path('demo') / 'yolo', exist_ok=True))  # increment run
-            save_dir.mkdir(parents=True, exist_ok=True)  # make dir
+            _, image_name = os.path.split(image_path)
+            image_name = image_name.split('.')[0]
+            save_dir = Path(increment_path(Path('demo') / image_name, exist_ok=True))  # increment run
+            (save_dir).mkdir(parents=True, exist_ok=True)  # make dir
 
 
         # Process detections
@@ -81,7 +85,8 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
             p, s, im0 = Path(path), '', im0s
 
             if save_img:
-                save_path = str(save_dir / p.name)
+                txt_path = str(save_dir / ('labels_' + p.stem))
+                save_path = str(save_dir / ('yolo_' + p.name))
 
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             if len(det):
@@ -96,35 +101,60 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
 
                 i_obj = 0
                 positions = []
+                xyxy_list = []
                 for *xyxy, conf, cls_ in det[:num_obj]:
-                    # xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                    obj = im0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+                    # xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  
+                    # normalized xywh
+                    
                     try:
-                        obj = cv2.resize(obj, (image_size, image_size), interpolation=cv2.INTER_CUBIC)
+                        obj = im0s[int(xyxy[1]):int(xyxy[3]),
+                                   int(xyxy[0]):int(xyxy[2])]
+                        obj = cv2.resize(obj, (image_size, image_size),
+                                         interpolation=cv2.INTER_CUBIC)
+                        xyxy_list.append(xyxy)
+
                     except:
                         continue
+
                     obj = transforms(Image.fromarray(cv2.cvtColor(obj, cv2.COLOR_BGR2RGB))).unsqueeze(0)
 
                     if i_obj == 0:
                         img_tensor = obj
+
                     else:
                         img_tensor = torch.cat([img_tensor, obj])
 
-                    xyxy = [xyxy[0]/im0s.shape[1], xyxy[1]/im0s.shape[0], xyxy[2]/im0s.shape[1], xyxy[3]/im0s.shape[0]]
+                    xyxy_ = [xyxy[0]/im0s.shape[1], xyxy[1]/im0s.shape[0], \
+                             xyxy[2]/im0s.shape[1], xyxy[3]/im0s.shape[0]]
                     zeros = [0] * 80
                     zeros[int(cls_)] = conf
-                    positions.append(xyxy + zeros)
+                    positions.append(xyxy_ + zeros)
 
                     i_obj += 1
                     if i_obj == num_obj // 2:
                         break
 
-                    if save_img:  # Add bbox to image
+                    # Add bbox to image
+                    if save_img:
+                        # normalized xywh
+                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn) \
+                                .view(-1) \
+                                .tolist()
+
+                        line = (names[int(cls_)], conf, *xywh)  # label format
+                        with open(txt_path + '.txt', 'a') as f:
+                            f.write(('%s ' + ('%g ' * (len(line) - 1)).rstrip()) \
+                                        % line + '\n')
+
                         label = '%s %.2f' % (names[int(cls_)], conf)
-                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls_)], line_thickness=3)
+                        plot_one_box(xyxy, im0,
+                                     label=label,
+                                     color=colors[int(cls_)],
+                                     line_thickness=1)
+                        cv2.imwrite(save_path, im0)
 
                     # box_list.append([np.array(xyxy), conf, int(cls_)])
 
         # all_box_list.append(box_list)
 
-    return img_tensor, positions # all_box_list
+    return img_tensor, positions, xyxy_list # all_box_list

@@ -90,10 +90,14 @@ class Transformer(nn.Module):
                                  .to(self.device)
 
             input_caption[:, 0] = 1
+            attention_list = []
             for t in range(self.max_length-1):
                 decode_input = input_caption[:, :t+1].clone()
-                decode_output, _, _ = self.decoder(caption_vector=decode_input,
+                decode_output, _, attention = self.decoder(
+                                                   caption_vector=decode_input,
                                                    encode_output=encode_output)
+                attention_list.append(np.mean(attention.numpy()[:, :, t], axis=1))
+
                 output = decode_output[:, t]
                 output = self.classifer(output)
                 output = self.softmax(output)
@@ -104,7 +108,7 @@ class Transformer(nn.Module):
                 if t+1 < self.max_length-1:
                     input_caption[:, t+1] = output.long()
 
-        return final_output
+        return final_output, attention_list
 
 
 class Encoder(nn.Module):
@@ -241,7 +245,7 @@ class PositionalEncoding(nn.Module):
 
         # Not a parameter
         self.register_buffer(
-            name='pos_table', 
+            name='pos_table',
             tensor=self._get_sinusoid_encoding_table(
                             num_positions=num_positions,
                             dim_word_embedding=dim_word_embedding)

@@ -1,6 +1,7 @@
 import os
 import pickle
 
+import cv2
 import fire
 import torch
 import torch.nn as nn
@@ -19,11 +20,11 @@ from preprocess import image_feature, ResnetExtractor
 
 if torch.cuda.is_available():
     DEVICE = torch.device("cuda:1")
-    print('\nUsing cuda:1\n')
+    print('Using cuda:1\n')
 
 else:
     DEVICE = torch.device("cpu")
-    print('\nUsing cpu\n')
+    print('Using cpu\n')
 
 
 class MODEL:
@@ -81,12 +82,13 @@ class MODEL:
     def generate_caption(self, object_features,
                                position_features,
                                beam_size=None):
-        caption_vector = self.model.generate_caption_vector(
+        caption_vector, attention_list = \
+                            self.model.generate_caption_vector(
                                 object_features=object_features.to(DEVICE),
                                 position_features=position_features.to(DEVICE),
-                                beam_size=beam_size).cpu()
+                                beam_size=beam_size)
         
-        return self.decode_captions(caption_vector.numpy())
+        return self.decode_captions(caption_vector.cpu().numpy()), attention_list
 
     def decode_captions(self, caption_vector):
         return decode_captions(captions=caption_vector,
@@ -158,7 +160,7 @@ def train():
                                    i+n_iter*(epoch-1))
             
             if (i+1) % 2500 == 0:
-                sample_caption = model.generate_caption(
+                sample_caption, _ = model.generate_caption(
                                     object_features=batch_features[:1],
                                     position_features=batch_positions[:1])
 
@@ -206,8 +208,8 @@ def train():
             valid_loss += model.compute_loss(object_features=batch_features,
                                              position_features=batch_positions,
                                              target_caption=batch_captions)
-            captions = model.generate_caption(object_features=batch_features,
-                                              position_features=batch_positions)
+            captions, _ = model.generate_caption(object_features=batch_features,
+                                                 position_features=batch_positions)
 
             for i, idx in enumerate(batch_image_idxs):
                 valid_caption[idx] = captions[i]
@@ -264,9 +266,9 @@ def evaluation(split='test', epoch=90, beam_size=1):
             batch_positions,
             batch_image_idxs) in enumerate(tqdm(test_dataloader)):
 
-        captions = model.generate_caption(object_features=batch_features,
-                                          position_features=batch_positions,
-                                          beam_size=beam_size)
+        captions, _ = model.generate_caption(object_features=batch_features,
+                                             position_features=batch_positions,
+                                             beam_size=beam_size)
 
         for i, idx in enumerate(batch_image_idxs):
             test_caption[idx] = captions[i]
@@ -288,25 +290,47 @@ def demo(image_path, beam_size, epoch=90):
     tfms = transforms.Compose([transforms.ToTensor(),
                                transforms.Normalize(norm_mean, norm_std),])
 
-    features, positions = image_feature(image_path=image_path,
-                                        model=resnet_model,
-                                        transforms=tfms,
-                                        image_size=image_size,
-                                        save_img=True)
-    feature = torch.FloatTensor(features).unsqueeze(0).to(DEVICE)
-    position = torch.FloatTensor(positions).unsqueeze(0).to(DEVICE)
-
+    features, positions, xyxy = image_feature(image_path=image_path,
+                                              model=resnet_model,
+                                              transforms=tfms,
+                                              image_size=image_size,
+                                              save_img=True)
+    feature = torch.FloatTensor(features).to(DEVICE)
+    position = torch.FloatTensor(positions).to(DEVICE)
 
     model_path = os.path.join(OUTPUT_PATH, f'model/model_{epoch}.pt')
 
     model = MODEL()
     model.load(path=model_path)
 
-    caption = model.generate_caption(object_features=feature,
-                                     position_features=position,
-                                     beam_size=beam_size)
+    caption, attention_list = model.generate_caption(object_features=feature,
+                                                     position_features=position,
+                                                     beam_size=beam_size)
+    caption = caption[0]
+    caption_length = len(caption.split(' '))
+    attention_list = np.array(attention_list).reshape(MAX_LENGTH+1, NUM_OBJECT+1)
+
+    _, image_name = os.path.split(image_path)
+    image_dir = image_name.split('.')[0]
+    for i, attention in enumerate(attention_list):
+        img = cv2.imread(image_path)
+
+        for obj_attend, obj_xyxy in zip(attention[1:], xyxy):
+            c1 = (int(obj_xyxy[0]), int(obj_xyxy[1]))
+            c2 = (int(obj_xyxy[2]), int(obj_xyxy[3]))
+
+            zeros = np.zeros((img.shape), dtype=np.uint8)
+            zeros_mask = cv2.rectangle(zeros, c1, c2,
+                                       color=(255, 255, 255),
+                                       thickness=-1)
+            img = cv2.addWeighted(img, 1, zeros_mask, 1-obj_attend, gamma=0)
+
+        cv2.imwrite(f'./demo/{image_dir}/{i+1}_{image_name}', img)
+
+        if i == (caption_length - 1):
+            break
     
-    print("Generated Caption: ", caption[0])
+    print("Generated Caption:", caption)
 
 
 if __name__ == '__main__':

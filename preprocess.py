@@ -47,12 +47,12 @@ class ResnetExtractor(nn.Module):
 def image_feature(image_path, model, transforms, image_size,
                   num_obj=NUM_OBJECT, save_img=False):
     weights = './data/yolov5/yolov5x.pt'
-    img_tensor, positions = get_boxes(weights, 
-                                      image_path=image_path,
-                                      num_obj=num_obj*2,
-                                      transforms=transforms,
-                                      image_size=image_size,
-                                      save_img=save_img)
+    img_tensor, positions, xyxy = get_boxes(weights,
+                                            image_path=image_path,
+                                            num_obj=num_obj*2,
+                                            transforms=transforms,
+                                            image_size=image_size,
+                                            save_img=save_img)
 
     all_features = []
     all_positions = []
@@ -67,9 +67,9 @@ def image_feature(image_path, model, transforms, image_size,
 
         # img_tensor = im0s_resized
         img_tensor = torch.cat([im0s_resized, img_tensor])
-        xyxy = [0, 0, 1, 1]
+        xyxy_ = [0, 0, 1, 1]
         zeros = [0] * 80
-        positions = [xyxy + zeros] + positions #xyxy, class * conf
+        positions = [xyxy_ + zeros] + positions # xyxy, class * conf
 
         with torch.no_grad():
             features = model(img_tensor).tolist()
@@ -77,7 +77,7 @@ def image_feature(image_path, model, transforms, image_size,
         all_features.append(features)
         all_positions.append(positions)
 
-    return np.array(all_features), np.array(all_positions)
+    return np.array(all_features), np.array(all_positions), xyxy
 
 
 def _process_caption_data(caption_file, image_dir, max_length):
@@ -327,10 +327,10 @@ if __name__ == "__main__":
         print(f"{feats_save_path}")
         
         for start, path in enumerate(tqdm(image_path)):
-            features, positions = image_feature(image_path=path,
-                                                model=model,
-                                                transforms=tfms,
-                                                image_size=image_size)
+            features, positions, _ = image_feature(image_path=path,
+                                                   model=model,
+                                                   transforms=tfms,
+                                                   image_size=image_size)
             end = start + 1
             all_feats[start:end, :] = features
             all_posit[start:end, :] = positions
