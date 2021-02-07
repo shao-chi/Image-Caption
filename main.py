@@ -81,7 +81,7 @@ class MODEL:
 
     def generate_caption(self, object_features,
                                position_features,
-                               beam_size=None):
+                               beam_size=1):
         caption_vector, attention_list = \
                             self.model.generate_caption_vector(
                                 object_features=object_features.to(DEVICE),
@@ -165,7 +165,7 @@ def train():
                                     position_features=batch_positions[:1])
 
                 writer.add_text('CAPTION/Sample_caption',
-                                sample_caption[0], 
+                                sample_caption[0],
                                 i+n_iter*(epoch-1))
                 print('\nSample caption: ', sample_caption[0])
 
@@ -226,6 +226,7 @@ def train():
                           data_path=DATA_PATH,
                           split='valid',
                           get_scores=True)
+
         scores['train_loss'] = train_loss
         scores['valid_loss'] = valid_loss
         write_bleu(scores=scores, path=OUTPUT_PATH, epoch=epoch)
@@ -262,9 +263,9 @@ def evaluation(split='test', epoch=90, beam_size=1):
 
     test_caption = [''] * test_dataset.len_image
 
-    for i, (batch_features,
-            batch_positions,
-            batch_image_idxs) in enumerate(tqdm(test_dataloader)):
+    for batch_features, \
+        batch_positions, \
+        batch_image_idxs in tqdm(test_dataloader):
 
         captions, _ = model.generate_caption(object_features=batch_features,
                                              position_features=batch_positions,
@@ -275,6 +276,7 @@ def evaluation(split='test', epoch=90, beam_size=1):
 
     save_pickle(test_caption,
                 str(os.path.join(target_dir, f"{split}.candidate.captions.pkl")))
+
     evaluate(target_dir=target_dir,
              data_path=DATA_PATH,
              split=split,

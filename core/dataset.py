@@ -34,12 +34,12 @@ class TestDataset(Dataset):
     def __getitem__(self, index):
         image_idx = self.data['image_idxs'][index]
 
-        return self.data['features'][index], \
-                self.data['positions'][index], \
+        return self.data['features'][image_idx], \
+                self.data['positions'][image_idx], \
                 image_idx
 
     def __len__(self):
-        return len(self.data['positions'])
+        return len(self.data['captions'])
 
     @property
     def len_image(self):

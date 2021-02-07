@@ -76,7 +76,7 @@ class Transformer(nn.Module):
     # TODO: Beam Search
     def generate_caption_vector(self, object_features,
                                       position_features,
-                                      beam_size):
+                                      beam_size=1):
         with torch.no_grad():
             encode_output, _ = self.encoder(object_features=object_features,
                                             position_features=position_features)
