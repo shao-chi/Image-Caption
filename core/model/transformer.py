@@ -31,6 +31,7 @@ class Transformer(nn.Module):
 
         self.max_length = max_length
         self.device = device
+        self.num_vocab = num_vocab
 
         self.encoder = Encoder(dim_positions=encode_dim_positions,
                                dim_features=encode_dim_features,
@@ -57,8 +58,9 @@ class Transformer(nn.Module):
         self.softmax = nn.Softmax(dim=1)
         self.loss = nn.CrossEntropyLoss(ignore_index=PAD_IDX, reduction='mean')
 
+
     def forward(self, object_features,
-                      position_features, 
+                      position_features,
                       target_caption):
         encode_output, _ = self.encoder(object_features=object_features,
                                         position_features=position_features)
@@ -73,19 +75,15 @@ class Transformer(nn.Module):
 
         return loss
 
-    # TODO: Beam Search
+
     def generate_caption_vector(self, object_features,
-                                      position_features,
-                                      beam_size=1):
+                                      position_features):
         with torch.no_grad():
             encode_output, _ = self.encoder(object_features=object_features,
                                             position_features=position_features)
 
             batch_size = encode_output.size(0)
-            input_caption = torch.zeros(batch_size, self.max_length-1) \
-                                 .long() \
-                                 .to(self.device)
-            final_output = torch.zeros(batch_size, self.max_length-1) \
+            input_caption = torch.zeros(batch_size, self.max_length+1) \
                                  .long() \
                                  .to(self.device)
 
@@ -102,13 +100,72 @@ class Transformer(nn.Module):
                 output = self.classifer(output)
                 output = self.softmax(output)
                 output = torch.argmax(output, dim=1)
-                # _, output_indices = torch.topk(k=beam_size, dim=1, sorted=False)
-                final_output[:, t] = output.clone().long()
                 
-                if t+1 < self.max_length-1:
-                    input_caption[:, t+1] = output.long()
+                input_caption[:, t+1] = output.long()
 
-        return final_output, attention_list
+        return input_caption, attention_list
+
+
+    def beam_search(self, object_features,
+                          position_features,
+                          beam_size=1):
+        with torch.no_grad():
+            encode_output, _ = self.encoder(object_features=object_features,
+                                            position_features=position_features)
+
+            batch_size = encode_output.size(0)
+            input_caption = torch.zeros(beam_size, batch_size, self.max_length) \
+                                 .long() \
+                                 .to(self.device)
+
+            input_caption[:, :, 0] = 1
+            decode_input = input_caption[0, :, :1].clone()
+            decode_output, _, _ = self.decoder(
+                                                    caption_vector=decode_input,
+                                                    encode_output=encode_output)
+            output = decode_output[:, 0]
+            output = self.classifer(output)
+            output = self.softmax(output)
+
+            topk_prob, topk_index = torch.topk(output,
+                                               k=beam_size,
+                                               dim=1,
+                                               sorted=False)
+            topk_prob = torch.transpose(topk_prob, 0, 1)
+            topk_index = torch.transpose(topk_index, 0, 1)
+            input_caption[:, :, 1] = topk_index
+
+            logits_tmp_list = []
+            for t in range(1, self.max_length-1):
+                logits_tmp_list.clear()
+
+                for b in range(beam_size):
+                    decode_input = input_caption[b, :, :t+1].clone()
+                    decode_output, _, _ = self.decoder(
+                                                    caption_vector=decode_input,
+                                                    encode_output=encode_output)
+
+                    output = decode_output[:, t]
+                    output = self.classifer(output)
+                    output = self.softmax(output) + topk_prob[b].unsqueeze(1)
+                    logits_tmp_list.append(output)
+
+                logits = torch.cat(logits_tmp_list, 1)
+                topk_prob, topk_index = torch.topk(logits,
+                                                   k=beam_size,
+                                                   dim=1,
+                                                   sorted=False)
+                topk_prob = torch.transpose(topk_prob, 0, 1)
+                topk_index = torch.transpose(topk_index, 0, 1)
+
+                tmp = torch.stack([torch.arange(batch_size)] * beam_size)
+                tmp = torch.unsqueeze(tmp, 1)
+                tmp_index = torch.unsqueeze(topk_index, 1) // self.num_vocab
+                input_caption = input_caption[tmp_index, tmp].clone().squeeze(1)
+
+                input_caption[:, :, t+1] = topk_index % self.num_vocab
+
+        return input_caption[0]
 
 
 class Encoder(nn.Module):
@@ -187,14 +244,6 @@ class Decoder(nn.Module):
                                                      num_positions=max_length)
         self.norm = nn.LayerNorm(normalized_shape=input_size,
                                  eps=1e-6)
-
-        # self.position_embedding = nn.Sequential(
-        #                                 nn.Linear(max_length, input_size),
-        #                                 nn.LayerNorm(input_size))
-        #                             # )
-        # nn.init.xavier_normal_(self.position_embedding.weight)
-        # self.word_embedding_linear.apply(init_weights)
-        # self.position_embedding.apply(init_weights)
 
         self.decoder = nn.ModuleList([
                 DecoderBlock(input_size=input_size,

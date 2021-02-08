@@ -1,8 +1,9 @@
+import time
+import os
+
 import numpy as np
 import pickle
 import hickle
-import time
-import os
 
 
 def load_pickle(path):
@@ -74,11 +75,14 @@ def decode_captions(captions, index_to_word):
             else:
                 word = index_to_word[captions[i, t]]
 
-            if word == '<END>':
+            if word == '<START>' and t == 0:
+                continue
+
+            elif word == '<END>':
                 words.append('.')
                 break
 
-            if word != '<NULL>':
+            elif word != '<NULL>':
                 words.append(word)
 
         decoded.append(' '.join(words))

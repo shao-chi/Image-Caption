@@ -81,14 +81,27 @@ class MODEL:
 
     def generate_caption(self, object_features,
                                position_features,
-                               beam_size=1):
-        caption_vector, attention_list = \
+                               beam_size=None):
+        if beam_size in [None, 1]:
+            caption_vector, attention_list = \
                             self.model.generate_caption_vector(
+                                object_features=object_features.to(DEVICE),
+                                position_features=position_features.to(DEVICE))
+
+            return self.decode_captions(caption_vector.cpu().numpy()), \
+                    attention_list
+
+        elif isinstance(beam_size, int) and beam_size > 1:
+            caption_vector = self.model.beam_search(
                                 object_features=object_features.to(DEVICE),
                                 position_features=position_features.to(DEVICE),
                                 beam_size=beam_size)
         
-        return self.decode_captions(caption_vector.cpu().numpy()), attention_list
+            return self.decode_captions(caption_vector.cpu().numpy()), None
+
+        else:
+            assert isinstance(beam_size, int)
+            assert beam_size > 1 or beam_size in [None, 1]
 
     def decode_captions(self, caption_vector):
         return decode_captions(captions=caption_vector,
@@ -246,7 +259,7 @@ def train():
     writer.close()
 
 
-def evaluation(split='test', epoch=90, beam_size=1):
+def evaluation(split='test', epoch=90, beam_size=None):
     model_path = os.path.join(OUTPUT_PATH, f'model/model_{epoch}.pt')
 
     model = MODEL()
@@ -283,7 +296,7 @@ def evaluation(split='test', epoch=90, beam_size=1):
              get_scores=False)
 
 
-def demo(image_path, beam_size, epoch=90):
+def demo(image_path, beam_size=None, epoch=90):
     resnet_model = ResnetExtractor()
     resnet_model.eval()
     image_size = 224
@@ -310,27 +323,29 @@ def demo(image_path, beam_size, epoch=90):
                                                      beam_size=beam_size)
     caption = caption[0]
     caption_length = len(caption.split(' '))
-    attention_list = np.array(attention_list).reshape(MAX_LENGTH+1, NUM_OBJECT+1)
 
-    _, image_name = os.path.split(image_path)
-    image_dir = image_name.split('.')[0]
-    for i, attention in enumerate(attention_list):
-        img = cv2.imread(image_path)
+    if isinstance(attention_list, list):
+        attention_list = np.array(attention_list).reshape(MAX_LENGTH+1, NUM_OBJECT+1)
 
-        for obj_attend, obj_xyxy in zip(attention[1:], xyxy):
-            c1 = (int(obj_xyxy[0]), int(obj_xyxy[1]))
-            c2 = (int(obj_xyxy[2]), int(obj_xyxy[3]))
+        _, image_name = os.path.split(image_path)
+        image_dir = image_name.split('.')[0]
+        for i, attention in enumerate(attention_list):
+            img = cv2.imread(image_path)
 
-            zeros = np.zeros((img.shape), dtype=np.uint8)
-            zeros_mask = cv2.rectangle(zeros, c1, c2,
-                                       color=(255, 255, 255),
-                                       thickness=-1)
-            img = cv2.addWeighted(img, 1, zeros_mask, 1-obj_attend, gamma=0)
+            for obj_attend, obj_xyxy in zip(attention[1:], xyxy):
+                c1 = (int(obj_xyxy[0]), int(obj_xyxy[1]))
+                c2 = (int(obj_xyxy[2]), int(obj_xyxy[3]))
 
-        cv2.imwrite(f'./demo/{image_dir}/{i+1}_{image_name}', img)
+                zeros = np.zeros((img.shape), dtype=np.uint8)
+                zeros_mask = cv2.rectangle(zeros, c1, c2,
+                                        color=(255, 255, 255),
+                                        thickness=-1)
+                img = cv2.addWeighted(img, 1, zeros_mask, 1-obj_attend, gamma=0)
 
-        if i == (caption_length - 1):
-            break
+            cv2.imwrite(f'./demo/{image_dir}/{i+1}_{image_name}', img)
+
+            if i == (caption_length - 1):
+                break
     
     print("Generated Caption:", caption)
 
