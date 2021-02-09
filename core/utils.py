@@ -90,22 +90,22 @@ def decode_captions(captions, index_to_word):
     return decoded
 
 
-def sample_coco_minibatch(data, batch_size):
-    data_size = data['features'].shape[0]
+# def sample_coco_minibatch(data, batch_size):
+#     data_size = data['features'].shape[0]
 
-    if data_size > 1:
-        mask = np.random.choice(data_size, batch_size)
-    else:
-        mask = [0]
+#     if data_size > 1:
+#         mask = np.random.choice(data_size, batch_size)
+#     else:
+#         mask = [0]
 
-    features = data['features'][mask]
-    file_names = data['file_names'][mask]
+#     features = data['features'][mask]
+#     file_names = data['file_names'][mask]
 
-    return features, file_names, mask
+#     return features, file_names, mask
 
 
-def write_bleu(scores, path, epoch):
-    if epoch == 0:
+def write_scores(scores, path, epoch):
+    if epoch == 1:
         file_mode = 'w'
 
     else:

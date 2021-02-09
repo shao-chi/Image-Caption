@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from core.model.modules import EncoderBlock, DecoderBlock
+from core.TRANSFORMER.modules import EncoderBlock, DecoderBlock
 from core.settings import PAD_IDX
 
 class Transformer(nn.Module):

@@ -1,7 +1,8 @@
 # Image Captioning
 
 ## Reference
-
+* Metrics : https://github.com/tylin/coco-caption.git
+* Show, Attend, and Tell : https://github.com/yunjey/show-attend-and-tell
 
 ## Getting Started
 ### Prerequisites

@@ -7,117 +7,20 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torchvision import transforms
 from tqdm import tqdm
 import numpy as np
 
-from core.model.transformer import Transformer
+from model import TRANSFORMER, DEVICE
 from core.settings import *
 from core.dataset import TrainDataset, TestDataset
-from core.utils import decode_captions, write_bleu, save_pickle
+from core.utils import write_scores, save_pickle
 from core.evaluations import evaluate
-from preprocess import image_feature, ResnetExtractor
-
-if torch.cuda.is_available():
-    DEVICE = torch.device("cuda:1")
-    print('Using cuda:1\n')
-
-else:
-    DEVICE = torch.device("cpu")
-    print('Using cpu\n')
 
 
-class MODEL:
-    def __init__(self):
-        super(MODEL, self).__init__()
-
-        word_to_idx = pickle.load(open(WORD_TO_IDX_PATH, 'rb'))
-        NUM_VOCAB = len(word_to_idx)
-        self.idx_to_word = {i: w for w, i in word_to_idx.items()}
-
-        self.model = Transformer(num_vocab=NUM_VOCAB,
-                                 max_length=MAX_LENGTH+2,
-                                 encode_dim_positions=ENCODE_DIM_POSITIONS,
-                                 encode_dim_features=ENCODE_DIM_FEATURES,
-                                 encode_input_size=ENCODE_INPUT_SIZE,
-                                 encode_q_k_dim=ENCODE_Q_K_DIM,
-                                 encode_v_dim=ENCODE_V_DIM,
-                                 encode_hidden_size=ENCODE_HIDDEN_SIZE,
-                                 encode_num_blocks=ENCODE_NUM_BLOCKS,
-                                 encode_num_heads=ENCODE_NUM_HEADS,
-                                 dim_word_embedding=DIM_WORD_EMBEDDING,
-                                 decode_input_size=DECODE_INPUT_SIZE,
-                                 decode_q_k_dim=DECODE_Q_K_DIM,
-                                 decode_v_dim=DECODE_V_DIM,
-                                 decode_hidden_size=DECODE_HIDDEN_SIZE,
-                                 decode_num_blocks=DECODE_NUM_BLOCKS,
-                                 decode_num_heads=DECODE_NUM_HEADS,
-                                 dropout=DROPOUT,
-                                 device=DEVICE).to(DEVICE)
-        self.optimizer = torch.optim.Adam((p for p in self.model.parameters() \
-                                                if p.requires_grad),
-                                          lr=LEARNING_RATE)
-
-    def train_step(self, batch_features,
-                         batch_positions,
-                         batch_captions):
-        self.optimizer.zero_grad()
-
-        loss = self.model(object_features=batch_features.to(DEVICE),
-                          position_features=batch_positions.to(DEVICE),
-                          target_caption=batch_captions.to(DEVICE))
-
-        loss.backward()
-        self.optimizer.step()
-
-    def compute_loss(self, object_features,
-                           position_features,
-                           target_caption):
-        with torch.no_grad():
-            return \
-                self.model(object_features=object_features.to(DEVICE),
-                           position_features=position_features.to(DEVICE),
-                           target_caption=target_caption.to(DEVICE)).cpu().item()
-
-    def generate_caption(self, object_features,
-                               position_features,
-                               beam_size=None):
-        if beam_size in [None, 1]:
-            caption_vector, attention_list = \
-                            self.model.generate_caption_vector(
-                                object_features=object_features.to(DEVICE),
-                                position_features=position_features.to(DEVICE))
-
-            return self.decode_captions(caption_vector.cpu().numpy()), \
-                    attention_list
-
-        elif isinstance(beam_size, int) and beam_size > 1:
-            caption_vector = self.model.beam_search(
-                                object_features=object_features.to(DEVICE),
-                                position_features=position_features.to(DEVICE),
-                                beam_size=beam_size)
-        
-            return self.decode_captions(caption_vector.cpu().numpy()), None
-
-        else:
-            assert isinstance(beam_size, int)
-            assert beam_size > 1 or beam_size in [None, 1]
-
-    def decode_captions(self, caption_vector):
-        return decode_captions(captions=caption_vector,
-                               index_to_word=self.idx_to_word)
-
-    def save(self, path):
-        torch.save(self.model.state_dict(), path)
-
-    def load(self, path):
-        state_dict = torch.load(path)
-        self.model.load_state_dict(state_dict)
-        self.model.eval()
+MODEL = TRANSFORMER()
 
 
 def train():
-    model = MODEL()
     writer = SummaryWriter(LOG_PATH)
 
     model_dir = os.path.join(OUTPUT_PATH, 'model/')
@@ -157,15 +60,15 @@ def train():
                 batch_captions,
                 batch_image_idxs) in enumerate(tqdm(train_dataloader)):
 
-            model.train_step(batch_features=batch_features,
+            MODEL.train_step(batch_features=batch_features,
                              batch_positions=batch_positions,
                              batch_captions=batch_captions)
             
             if i % 20 == 0:
-                t_loss = model.compute_loss(object_features=eval_t_features,
+                t_loss = MODEL.compute_loss(object_features=eval_t_features,
                                             position_features=eval_t_positions,
                                             target_caption=eval_t_captions)
-                v_loss = model.compute_loss(object_features=eval_v_features,
+                v_loss = MODEL.compute_loss(object_features=eval_v_features,
                                             position_features=eval_v_positions,
                                             target_caption=eval_v_captions)
                 writer.add_scalars('LOSS/BATCH',
@@ -173,7 +76,7 @@ def train():
                                    i+n_iter*(epoch-1))
             
             if (i+1) % 2500 == 0:
-                sample_caption, _ = model.generate_caption(
+                sample_caption, _ = MODEL.generate_caption(
                                     object_features=batch_features[:1],
                                     position_features=batch_positions[:1])
 
@@ -185,7 +88,7 @@ def train():
                 ground_truths = \
                     train_dataset.data['captions'] \
                         [train_dataset.data['image_idxs'] == batch_image_idxs[0].item()]
-                ground_truths = model.decode_captions(ground_truths)
+                ground_truths = MODEL.decode_captions(ground_truths)
                 truths = ''
                 for j, truth in enumerate(ground_truths):
                     truths += (truth + '\n')
@@ -203,7 +106,7 @@ def train():
                 batch_captions, _) in enumerate(train_dataloader):
 
             if i < len(valid_dataloader):
-                train_loss += model.compute_loss(
+                train_loss += MODEL.compute_loss(
                                 object_features=batch_features,
                                 position_features=batch_positions,
                                 target_caption=batch_captions)
@@ -218,10 +121,10 @@ def train():
             batch_captions, \
             batch_image_idxs in valid_dataloader:
 
-            valid_loss += model.compute_loss(object_features=batch_features,
+            valid_loss += MODEL.compute_loss(object_features=batch_features,
                                              position_features=batch_positions,
                                              target_caption=batch_captions)
-            captions, _ = model.generate_caption(object_features=batch_features,
+            captions, _ = MODEL.generate_caption(object_features=batch_features,
                                                  position_features=batch_positions)
 
             for i, idx in enumerate(batch_image_idxs):
@@ -242,19 +145,15 @@ def train():
 
         scores['train_loss'] = train_loss
         scores['valid_loss'] = valid_loss
-        write_bleu(scores=scores, path=OUTPUT_PATH, epoch=epoch)
+        write_scores(scores=scores, path=OUTPUT_PATH, epoch=epoch)
 
         writer.add_scalars('LOSS/EPOCH', {'Train': scores['train_loss'],
                                           'Valid': scores['valid_loss']}, epoch)
-        writer.add_scalar('EVALUATION/BLEU_1', scores['Bleu_1'], epoch)
-        writer.add_scalar('EVALUATION/BLEU_2', scores['Bleu_2'], epoch)
-        writer.add_scalar('EVALUATION/BLEU_3', scores['Bleu_3'], epoch)
-        writer.add_scalar('EVALUATION/BLEU_4', scores['Bleu_4'], epoch)
-        writer.add_scalar('EVALUATION/METEOR', scores['METEOR'], epoch)
-        writer.add_scalar('EVALUATION/ROUGE_L', scores['ROUGE_L'], epoch)
-        writer.add_scalar('EVALUATION/CIDEr', scores['CIDEr'], epoch)
+        for score_name, score in scores.items():
+            if score_name not in ['train_loss', 'valid_loss']:
+                writer.add_scalar(f'EVALUATION/{score_name}', score, epoch)
 
-        model.save(path=os.path.join(model_dir, f'model_{epoch}.pt'))
+        MODEL.save(path=os.path.join(model_dir, f'model_{epoch}.pt'))
 
     writer.close()
 
@@ -262,8 +161,7 @@ def train():
 def evaluation(split='test', epoch=90, beam_size=None):
     model_path = os.path.join(OUTPUT_PATH, f'model/model_{epoch}.pt')
 
-    model = MODEL()
-    model.load(path=model_path)
+    MODEL.load(path=model_path)
 
     test_dataset = TestDataset(data_path=DATA_PATH, split=split)
     test_dataloader = DataLoader(test_dataset,
@@ -280,7 +178,7 @@ def evaluation(split='test', epoch=90, beam_size=None):
         batch_positions, \
         batch_image_idxs in tqdm(test_dataloader):
 
-        captions, _ = model.generate_caption(object_features=batch_features,
+        captions, _ = MODEL.generate_caption(object_features=batch_features,
                                              position_features=batch_positions,
                                              beam_size=beam_size)
 
@@ -297,35 +195,24 @@ def evaluation(split='test', epoch=90, beam_size=None):
 
 
 def demo(image_path, beam_size=None, epoch=90):
-    resnet_model = ResnetExtractor()
-    resnet_model.eval()
-    image_size = 224
-    norm_mean = [0.485, 0.456, 0.406]
-    norm_std = [0.229, 0.224, 0.225]
-    tfms = transforms.Compose([transforms.ToTensor(),
-                               transforms.Normalize(norm_mean, norm_std),])
-
-    features, positions, xyxy = image_feature(image_path=image_path,
-                                              model=resnet_model,
-                                              transforms=tfms,
-                                              image_size=image_size,
-                                              save_img=True)
+    features, positions, xyxy = MODEL.preprocess(image_path=image_path)
+    
     feature = torch.FloatTensor(features).to(DEVICE)
     position = torch.FloatTensor(positions).to(DEVICE)
 
     model_path = os.path.join(OUTPUT_PATH, f'model/model_{epoch}.pt')
 
-    model = MODEL()
-    model.load(path=model_path)
+    MODEL.load(path=model_path)
 
-    caption, attention_list = model.generate_caption(object_features=feature,
+    caption, attention_list = MODEL.generate_caption(object_features=feature,
                                                      position_features=position,
                                                      beam_size=beam_size)
     caption = caption[0]
     caption_length = len(caption.split(' '))
 
     if isinstance(attention_list, list):
-        attention_list = np.array(attention_list).reshape(MAX_LENGTH+1, NUM_OBJECT+1)
+        attention_list = np.array(attention_list) \
+                                .reshape(MAX_LENGTH+1, NUM_OBJECT+1)
 
         _, image_name = os.path.split(image_path)
         image_dir = image_name.split('.')[0]

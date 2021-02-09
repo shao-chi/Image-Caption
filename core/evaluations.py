@@ -10,7 +10,7 @@ from .metrics.spice.spice import Spice
 
 def _score(ref_captions, hypo_captions):
     scorers = [
-        (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
+        (Bleu(4), ["BLEU_1", "BLEU_2", "BLEU_3", "BLEU_4"]),
         (Meteor(), "METEOR"),
         (Rouge(), "ROUGE_L"),
         (Cider(), "CIDEr"),
@@ -23,8 +23,8 @@ def _score(ref_captions, hypo_captions):
                                          res=hypo_captions)
 
         if isinstance(scores, list):
-            for m, s in zip(method, scores):
-                final_scores[m] = s
+            for method_name, score in zip(method, scores):
+                final_scores[method_name] = score
 
         else:
             final_scores[method] = scores
