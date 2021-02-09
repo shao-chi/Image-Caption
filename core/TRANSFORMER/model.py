@@ -159,9 +159,8 @@ class Transformer(nn.Module):
                 topk_index = torch.transpose(topk_index, 0, 1)
 
                 tmp = torch.stack([torch.arange(batch_size)] * beam_size)
-                tmp = torch.unsqueeze(tmp, 1)
-                tmp_index = torch.unsqueeze(topk_index, 1) // self.num_vocab
-                input_caption = input_caption[tmp_index, tmp].clone().squeeze(1)
+                tmp_index = topk_index // self.num_vocab
+                input_caption = input_caption[tmp_index, tmp].clone()
 
                 input_caption[:, :, t+1] = topk_index % self.num_vocab
 
