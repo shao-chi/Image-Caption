@@ -1,13 +1,13 @@
 # preprocess
 MAX_LENGTH = 49
 WORD_COUNT_THRESHOLD = 5
-NUM_OBJECT = 36
+NUM_OBJECT = 20
 
 # model
 PAD_IDX = 0
 
-MODEL_NAME = 'maxlen49'
-OUTPUT_NAME = 'maxlen49'
+MODEL_NAME = 'maxlen49_20obj'
+OUTPUT_NAME = 'maxlen49_20obj'
 DATA_PATH = f'./data/{MODEL_NAME}'
 OUTPUT_PATH = f'./output/{OUTPUT_NAME}'
 WORD_TO_IDX_PATH = f'{DATA_PATH}/train/word_index.pkl'

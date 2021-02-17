@@ -4,6 +4,7 @@ import numpy as np
 
 
 class ScaledDotProductAttention(nn.Module):
+    
     def __init__(self, temperature, attention_dropout=0.1):
         super(ScaledDotProductAttention, self).__init__()
 
@@ -27,6 +28,7 @@ class ScaledDotProductAttention(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
+
     def __init__(self, input_size, q_k_dim, v_dim, num_heads, dropout=0.1):
         super(MultiHeadAttention, self).__init__()
 
@@ -91,6 +93,7 @@ class MultiHeadAttention(nn.Module):
 
 
 class FeedForward(nn.Module):
+
     def __init__(self, input_size, hidden_size, dropout=0.1):
         super(FeedForward, self).__init__()
 
@@ -120,6 +123,7 @@ class FeedForward(nn.Module):
 
 
 class EncoderBlock(nn.Module):
+
     def __init__(self,
                 input_size,
                 hidden_size,
@@ -155,6 +159,7 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
+
     def __init__(self,
                 input_size,
                 hidden_size,

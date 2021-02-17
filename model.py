@@ -20,6 +20,7 @@ else:
 
 
 class MODEL:
+
     def __init__(self):
         super(MODEL, self).__init__()
 
@@ -59,6 +60,7 @@ class MODEL:
 
 
 class TRANSFORMER(MODEL):
+    
     def __init__(self):
         super(TRANSFORMER, self).__init__()
 
