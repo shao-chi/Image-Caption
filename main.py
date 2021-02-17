@@ -97,7 +97,6 @@ def train():
                 writer.add_text('CAPTION/Ground_truth',
                                 truths,
                                 i+n_iter*(epoch-1))
-            # break
 
         # evaluation
         train_loss = 0
