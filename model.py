@@ -5,7 +5,7 @@ import torch.nn as nn
 from torchvision import transforms
 
 from core.TRANSFORMER.model import Transformer
-from core.settings import *
+from core.config import *
 from core.utils import decode_captions
 from preprocess import image_feature, ResnetExtractor
 

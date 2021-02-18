@@ -11,7 +11,7 @@ from tqdm import tqdm
 import numpy as np
 
 from model import TRANSFORMER, DEVICE
-from core.settings import *
+from core.config import *
 from core.dataset import TrainDataset, TestDataset
 from core.utils import write_scores, save_pickle
 from core.evaluations import evaluate

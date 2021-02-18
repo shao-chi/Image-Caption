@@ -1,4 +1,4 @@
-FROM python:3.6
+FROM nvidia/cuda:10.2-base
 
 WORKDIR /Transformer
 
@@ -7,20 +7,21 @@ ADD . /Transformer
 RUN ["apt-get", "update"]
 RUN ["apt-get", "install", "-y", "vim"]
 
-# ENV NCCL_VERSION 2.7.8
+RUN apt-get -y update \
+    && apt-get install -y software-properties-common \
+    && apt-get -y update \
+    && add-apt-repository universe
+    
+# Install OpenJDK-11
+RUN apt-get -y update && \
+    apt-get install -y openjdk-11-jre-headless && \
+    apt-get clean
 
-# RUN apt-get update && apt-get install -y --no-install-recommends \
-#     cuda-libraries-$CUDA_PKG_VERSION \
-#     cuda-npp-$CUDA_PKG_VERSION \
-#     cuda-nvtx-$CUDA_PKG_VERSION \
-#     libcublas10=10.2.1.243-1 \
-#     libnccl2=$NCCL_VERSION-1+cuda10.1 \
-#     && apt-mark hold libnccl2 \
-#     && rm -rf /var/lib/apt/lists/*
+RUN apt-get -y update
+RUN apt-get -y install python3
+RUN apt-get -y install python3-pip
+RUN apt -y install libgl1-mesa-glx
+RUN apt-get -y install screen
 
-# # apt from auto upgrading the cublas package. See https://gitlab.com/nvidia/container-images/cuda/-/issues/88
-# RUN apt-mark hold libcublas10
-
-RUN apt update
-RUN apt install libgl1-mesa-glx
-RUN apt-get install screen
+RUN pip3 install --upgrade pip
+RUN pip3 install -r requirements.txt

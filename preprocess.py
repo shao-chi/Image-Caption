@@ -21,12 +21,13 @@ from torch.utils.data.dataloader import DataLoader
 from data.detect_for_preprocess import get_boxes
 from data.yolov5.utils.datasets import LoadImages
 from core.utils import *
-from core.settings import MAX_LENGTH, WORD_COUNT_THRESHOLD, DATA_PATH, NUM_OBJECT
+from core.config import MAX_LENGTH, WORD_COUNT_THRESHOLD, DATA_PATH, NUM_OBJECT
 
 
 parser = CoreNLPParser(url='http://localhost:9000')
 # lemmatizer = WordNetLemmatizer()
 
+# TODO: Faster R-CNN
 class ResnetExtractor(nn.Module):
     def __init__(self):
         super(ResnetExtractor, self).__init__()

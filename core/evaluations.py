@@ -1,11 +1,11 @@
 import pickle
 import os
 
-from .metrics.bleu.bleu import Bleu
-from .metrics.rouge.rouge import Rouge
-from .metrics.cider.cider import Cider
-from .metrics.meteor.meteor import Meteor
-from .metrics.spice.spice import Spice
+from core.metrics.bleu.bleu import Bleu
+from core.metrics.rouge.rouge import Rouge
+from core.metrics.cider.cider import Cider
+from core.metrics.meteor.meteor import Meteor
+from core.metrics.spice.spice import Spice
 
 
 def _score(ref_captions, hypo_captions):

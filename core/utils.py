@@ -1,9 +1,17 @@
 import time
 import os
+import configparser
 
 import numpy as np
 import pickle
 import hickle
+
+
+def getConfig():
+    config = configparser.ConfigParser()
+    config.read('%s/core/config.cfg' % (os.getcwd()))
+    
+    return config
 
 
 def load_pickle(path):

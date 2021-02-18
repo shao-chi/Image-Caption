@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 
 from core.TRANSFORMER.modules import EncoderBlock, DecoderBlock
-from core.settings import PAD_IDX
+from core.config import PAD_IDX
 
 class Transformer(nn.Module):
 
@@ -94,7 +94,7 @@ class Transformer(nn.Module):
                 decode_output, _, attention = self.decoder(
                                                    caption_vector=decode_input,
                                                    encode_output=encode_output)
-                attention_list.append(np.mean(attention.numpy()[:, :, t], axis=1))
+                attention_list.append(np.mean(attention.cpu().numpy()[:, :, t], axis=1))
 
                 output = decode_output[:, t]
                 output = self.classifer(output)
