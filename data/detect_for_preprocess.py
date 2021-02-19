@@ -25,14 +25,18 @@ from data.yolov5.utils.torch_utils import select_device, load_classifier, time_s
 def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=False):
     # weights = 'yolov5x.pt'
     imgsz = 640 # img_size
-    conf_thres = 0.05
+    conf_thres = 0.01
     iou_thres = 0.45
-    device = 'cpu'
     classes = None
     agnostic_nms = None
     augment = None
     exist_ok = None
     save_conf = True
+
+    if torch.cuda.is_available():
+        device = '1'
+    else:
+        device = 'cpu'
     
     # Initialize
     set_logging()
@@ -89,6 +93,11 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
                 save_path = str(save_dir / ('yolo_' + p.name))
 
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+
+            img_tensor = []
+            positions = []
+            xyxy_list = []
+
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -100,8 +109,6 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
                     num_obj = len(det)
 
                 i_obj = 0
-                positions = []
-                xyxy_list = []
                 for *xyxy, conf, cls_ in det[:num_obj]:
                     # xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  
                     # normalized xywh

@@ -144,6 +144,6 @@ class TRANSFORMER(MODEL):
         torch.save(self.model.state_dict(), path)
 
     def load(self, path):
-        state_dict = torch.load(path)
+        state_dict = torch.load(path, map_location=DEVICE)
         self.model.load_state_dict(state_dict)
         self.model.eval()

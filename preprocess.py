@@ -25,6 +25,12 @@ from core.config import MAX_LENGTH, WORD_COUNT_THRESHOLD, DATA_PATH, NUM_OBJECT,
                         ENCODE_DIM_FEATURES, ENCODE_DIM_POSITIONS
 
 
+if torch.cuda.is_available():
+    DEVICE = torch.device("cuda:1")
+else:
+    DEVICE = torch.device("cpu")
+
+
 parser = CoreNLPParser(url='http://localhost:9000')
 # lemmatizer = WordNetLemmatizer()
 
@@ -66,8 +72,11 @@ def image_feature(image_path, model, transforms, image_size,
             Image.fromarray(cv2.cvtColor(im0s_resized, cv2.COLOR_BGR2RGB))
         ).unsqueeze(0)
 
-        # img_tensor = im0s_resized
-        img_tensor = torch.cat([im0s_resized, img_tensor])
+        if len(img_tensor) == 0:
+            img_tensor = im0s_resized
+        else:
+            img_tensor = torch.cat([im0s_resized, img_tensor])
+
         xyxy_ = [0, 0, 1, 1]
         zeros = [0] * 80
         positions = [xyxy_ + zeros] + positions # xyxy, class * conf
@@ -77,7 +86,7 @@ def image_feature(image_path, model, transforms, image_size,
                 positions += [([0] * ENCODE_DIM_POSITIONS)]
 
         with torch.no_grad():
-            features = model(img_tensor).numpy()
+            features = model(img_tensor.to(DEVICE)).cpu().numpy()
 
         if features.shape[0] < num_obj + 1:
             features = np.concatenate([features, np.zeros((num_obj + 1 - features.shape[0], ENCODE_DIM_FEATURES))])
@@ -254,29 +263,29 @@ if __name__ == "__main__":
         for split in ['train', 'valid', 'test']:
             os.makedirs(os.path.join(caption_path, split))
 
-    # # about 110000 images and 5500000 captions for train dataset
-    # train_dataset = _process_caption_data(
-    #     caption_file='../raw_data/MSCOCO/annotations/captions_train2017.json',
-    #     image_dir='../raw_data/MSCOCO/image/train2017/',
-    #     max_length=max_length)
+    # about 110000 images and 5500000 captions for train dataset
+    train_dataset = _process_caption_data(
+        caption_file='../raw_data/MSCOCO/annotations/captions_train2017.json',
+        image_dir='../raw_data/MSCOCO/image/train2017/',
+        max_length=max_length)
 
-    # # about 5000 images and 25000 captions
-    # valid_dataset = _process_caption_data(
-    #     caption_file='../raw_data/MSCOCO/annotations/captions_val2017.json',
-    #     image_dir='../raw_data/MSCOCO/image/val2017/',
-    #     max_length=max_length)
+    # about 5000 images and 25000 captions
+    valid_dataset = _process_caption_data(
+        caption_file='../raw_data/MSCOCO/annotations/captions_val2017.json',
+        image_dir='../raw_data/MSCOCO/image/val2017/',
+        max_length=max_length)
 
-    # # about 2500 images and 2500 captions for val / test dataset
-    # valid_cutoff = int(0.5 * len(valid_dataset))
-    # test_cutoff = int(len(valid_dataset))
-    # print('Finished processing caption data')
+    # about 2500 images and 2500 captions for val / test dataset
+    valid_cutoff = int(0.5 * len(valid_dataset))
+    test_cutoff = int(len(valid_dataset))
+    print('Finished processing caption data')
 
-    # save_pickle(train_dataset, f'{caption_path}/train/train.annotations.pkl')
-    # save_pickle(valid_dataset[:valid_cutoff], f'{caption_path}/valid/valid.annotations.pkl')
-    # save_pickle(valid_dataset[valid_cutoff:test_cutoff].reset_index(drop=True),
-    #         f'{caption_path}/test/test.annotations.pkl')
+    save_pickle(train_dataset, f'{caption_path}/train/train.annotations.pkl')
+    save_pickle(valid_dataset[:valid_cutoff], f'{caption_path}/valid/valid.annotations.pkl')
+    save_pickle(valid_dataset[valid_cutoff:test_cutoff].reset_index(drop=True),
+            f'{caption_path}/test/test.annotations.pkl')
 
-    model = ResnetExtractor()
+    model = ResnetExtractor().to(DEVICE)
     model.eval()
     image_size = 224
     norm_mean = [0.485, 0.456, 0.406]
@@ -328,8 +337,10 @@ if __name__ == "__main__":
 
         # i = 0
         # sp = 10000
-        all_feats = np.ndarray([n_examples, NUM_OBJECT+1, 2048], dtype=np.float32)
-        all_posit = np.ndarray([n_examples, NUM_OBJECT+1, 84], dtype=np.float32)
+        all_feats = np.ndarray([n_examples, NUM_OBJECT+1, ENCODE_DIM_FEATURES],
+                               dtype=np.float32)
+        all_posit = np.ndarray([n_examples, NUM_OBJECT+1, ENCODE_DIM_POSITIONS],
+                               dtype=np.float32)
 
         feats_save_path = f'{caption_path}/{split}/{split}.features.hkl'
         posit_save_path = f'{caption_path}/{split}/{split}.positions.hkl'
