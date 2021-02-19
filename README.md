@@ -1,7 +1,12 @@
 # Image Captioning
 
 ## Getting Started
+
 ### Prerequisites
+* Bulid docker
+    <br>
+    Run `bash docker_run.sh`
+
 * Get Evaluation Function
     ```
     cd core/

@@ -242,6 +242,9 @@ if __name__ == "__main__":
     word_count_threshold = WORD_COUNT_THRESHOLD
 
     caption_path = DATA_PATH
+    if not os.path.exists(caption_path):
+        for split in ['train', 'valid', 'test']:
+            os.makedirs(os.path.join(caption_path, split))
 
     # about 110000 images and 5500000 captions for train dataset
     train_dataset = _process_caption_data(

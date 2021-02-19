@@ -12,7 +12,7 @@ RUN apt-get -y update \
     && apt-get -y update \
     && add-apt-repository universe
     
-# Install OpenJDK-11
+# Install OpenJDK-11 for CUDA
 RUN apt-get -y update && \
     apt-get install -y openjdk-11-jre-headless && \
     apt-get clean
