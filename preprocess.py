@@ -21,7 +21,8 @@ from torch.utils.data.dataloader import DataLoader
 from data.detect_for_preprocess import get_boxes
 from data.yolov5.utils.datasets import LoadImages
 from core.utils import *
-from core.config import MAX_LENGTH, WORD_COUNT_THRESHOLD, DATA_PATH, NUM_OBJECT
+from core.config import MAX_LENGTH, WORD_COUNT_THRESHOLD, DATA_PATH, NUM_OBJECT, \
+                        ENCODE_DIM_FEATURES, ENCODE_DIM_POSITIONS
 
 
 parser = CoreNLPParser(url='http://localhost:9000')
@@ -71,8 +72,15 @@ def image_feature(image_path, model, transforms, image_size,
         zeros = [0] * 80
         positions = [xyxy_ + zeros] + positions # xyxy, class * conf
 
+        if len(positions) < num_obj + 1:
+            for _ in range(num_obj + 1 - len(positions)):
+                positions += [([0] * ENCODE_DIM_POSITIONS)]
+
         with torch.no_grad():
-            features = model(img_tensor).tolist()
+            features = model(img_tensor).numpy()
+
+        if features.shape[0] < num_obj + 1:
+            features = np.concatenate([features, np.zeros((num_obj + 1 - features.shape[0], ENCODE_DIM_FEATURES))])
 
         all_features.append(features)
         all_positions.append(positions)
@@ -246,27 +254,27 @@ if __name__ == "__main__":
         for split in ['train', 'valid', 'test']:
             os.makedirs(os.path.join(caption_path, split))
 
-    # about 110000 images and 5500000 captions for train dataset
-    train_dataset = _process_caption_data(
-        caption_file='../raw_data/MSCOCO/annotations/captions_train2017.json',
-        image_dir='../raw_data/MSCOCO/image/train2017/',
-        max_length=max_length)
+    # # about 110000 images and 5500000 captions for train dataset
+    # train_dataset = _process_caption_data(
+    #     caption_file='../raw_data/MSCOCO/annotations/captions_train2017.json',
+    #     image_dir='../raw_data/MSCOCO/image/train2017/',
+    #     max_length=max_length)
 
-    # about 5000 images and 25000 captions
-    valid_dataset = _process_caption_data(
-        caption_file='../raw_data/MSCOCO/annotations/captions_val2017.json',
-        image_dir='../raw_data/MSCOCO/image/val2017/',
-        max_length=max_length)
+    # # about 5000 images and 25000 captions
+    # valid_dataset = _process_caption_data(
+    #     caption_file='../raw_data/MSCOCO/annotations/captions_val2017.json',
+    #     image_dir='../raw_data/MSCOCO/image/val2017/',
+    #     max_length=max_length)
 
-    # about 2500 images and 2500 captions for val / test dataset
-    valid_cutoff = int(0.5 * len(valid_dataset))
-    test_cutoff = int(len(valid_dataset))
-    print('Finished processing caption data')
+    # # about 2500 images and 2500 captions for val / test dataset
+    # valid_cutoff = int(0.5 * len(valid_dataset))
+    # test_cutoff = int(len(valid_dataset))
+    # print('Finished processing caption data')
 
-    save_pickle(train_dataset, f'{caption_path}/train/train.annotations.pkl')
-    save_pickle(valid_dataset[:valid_cutoff], f'{caption_path}/valid/valid.annotations.pkl')
-    save_pickle(valid_dataset[valid_cutoff:test_cutoff].reset_index(drop=True),
-            f'{caption_path}/test/test.annotations.pkl')
+    # save_pickle(train_dataset, f'{caption_path}/train/train.annotations.pkl')
+    # save_pickle(valid_dataset[:valid_cutoff], f'{caption_path}/valid/valid.annotations.pkl')
+    # save_pickle(valid_dataset[valid_cutoff:test_cutoff].reset_index(drop=True),
+    #         f'{caption_path}/test/test.annotations.pkl')
 
     model = ResnetExtractor()
     model.eval()

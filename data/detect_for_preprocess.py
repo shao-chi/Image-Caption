@@ -25,8 +25,8 @@ from data.yolov5.utils.torch_utils import select_device, load_classifier, time_s
 def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=False):
     # weights = 'yolov5x.pt'
     imgsz = 640 # img_size
-    conf_thres = 0.000005
-    iou_thres = 0.6 #0.45
+    conf_thres = 0.05
+    iou_thres = 0.45
     device = 'cpu'
     classes = None
     agnostic_nms = None
