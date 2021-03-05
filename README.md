@@ -35,7 +35,7 @@
 * Transform images and annotations into specific format
 * Split data into training set, validation set, and testing set
     ```
-    python3 preprocess.py
+    python3 features.py
     ```
 
 ### Train Model
