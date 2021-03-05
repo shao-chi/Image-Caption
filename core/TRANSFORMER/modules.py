@@ -186,28 +186,28 @@ class DecoderBlock(nn.Module):
     def forward(self, decode_input, encode_output,
                 non_pad_mask=None,
                 self_attention_mask=None,
-                decode_encode_attention_mask=None):
+                context_attention_mask=None):
         decode_output, decode_attention = \
                 self.self_attention(q=decode_input,
                                     k=decode_input,
                                     v=decode_input,
                                     mask=self_attention_mask)
 
-        if non_pad_mask is not None:
-            decode_output *= non_pad_mask
+        # if non_pad_mask is not None:
+        #     decode_output *= non_pad_mask
 
-        decode_output, decode_encode_attention = \
+        decode_output, context_attention = \
                 self.encode_attention(q=decode_output,
                                       k=encode_output,
                                       v=encode_output,
-                                      mask=decode_encode_attention_mask)
+                                      mask=context_attention_mask)
 
-        if non_pad_mask is not None:
-            decode_output *= non_pad_mask
+        # if non_pad_mask is not None:
+        #     decode_output *= non_pad_mask
 
         decode_output = self.feed_forward(decode_output)
 
-        if non_pad_mask is not None:
-            decode_output *= non_pad_mask
+        # if non_pad_mask is not None:
+        #     decode_output *= non_pad_mask
 
-        return decode_output, decode_attention, decode_encode_attention
+        return decode_output, decode_attention, context_attention

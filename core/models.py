@@ -1,28 +1,28 @@
 import pickle
 
+import cv2
 import torch
-import torch.nn as nn
-from torchvision import transforms
 
 from core.TRANSFORMER.model import Transformer
 from core.config import *
 from core.utils import decode_captions
-from preprocess import image_feature, ResnetExtractor
+from core.preprocess import image_feature_YOLOv5, image_feature_FasterRCNN, \
+                            ResnetExtractor, FasterRCNNExtractor
 
 
 if torch.cuda.is_available():
-    DEVICE = torch.device("cuda:1")
-    print('Using cuda:1\n')
-
+    device_name = "cuda:1"
 else:
-    DEVICE = torch.device("cpu")
-    print('Using cpu\n')
+    device_name = "cpu"
+
+DEVICE = torch.device(device_name)
+print(f'Using {device_name}\n')
 
 
-class MODEL:
+class MODEL_init:
 
     def __init__(self):
-        super(MODEL, self).__init__()
+        super(MODEL_init, self).__init__()
 
     def train_step(self):
         raise NotImplementedError
@@ -42,24 +42,17 @@ class MODEL:
     def load(self):
         raise NotImplementedError
 
-    def preprocess(self, image_path):
-        resnet_model = ResnetExtractor()
-        resnet_model.eval()
-
-        image_size = 224
-        norm_mean = [0.485, 0.456, 0.406]
-        norm_std = [0.229, 0.224, 0.225]
-        tfms = transforms.Compose([transforms.ToTensor(),
-                                transforms.Normalize(norm_mean, norm_std),])
-
-        return image_feature(image_path=image_path,
-                             model=resnet_model,
-                             transforms=tfms,
-                             image_size=image_size,
-                             save_img=True)
+    def preprocess(self, image_path, save_img=False):
+        if IMAGE_MODEL == 'YOLOv5':
+            return image_feature_YOLOv5(image_path=image_path,
+                                        save_img=save_img)
+        
+        elif IMAGE_MODEL == 'FasterRCNN':
+            return image_feature_FasterRCNN(image_path=image_path,
+                                            save_img=save_img)
 
 
-class TRANSFORMER(MODEL):
+class TRANSFORMER(MODEL_init):
     
     def __init__(self):
         super(TRANSFORMER, self).__init__()

@@ -93,33 +93,40 @@ def decode_captions(captions, index_to_word):
             elif word != '<NULL>':
                 words.append(word)
 
+            elif len(word) >= 2 and \
+                    word[-2] == 'a' and \
+                    word[-1][0] in ['a', 'e', 'i', 'o', 'u']:
+                word[-2] = 'an'
+
         decoded.append(' '.join(words))
 
     return decoded
 
 
-# def sample_coco_minibatch(data, batch_size):
-#     data_size = data['features'].shape[0]
+def sample_coco_minibatch(data, batch_size):
+    data_size = data['features'].shape[0]
 
-#     if data_size > 1:
-#         mask = np.random.choice(data_size, batch_size)
-#     else:
-#         mask = [0]
+    if data_size > 1:
+        mask = np.random.choice(data_size, batch_size)
+    else:
+        mask = [0]
 
-#     features = data['features'][mask]
-#     file_names = data['file_names'][mask]
+    features = data['features'][mask]
+    file_names = data['file_names'][mask]
 
-#     return features, file_names, mask
+    return features, file_names, mask
 
 
-def write_scores(scores, path, epoch):
-    if epoch == 1:
+def write_scores(scores, path, epoch, split):
+    file_path = os.path.join(path, f'{split}_scores.txt')
+
+    if os.path.exists(file_path) == False:
         file_mode = 'w'
 
     else:
         file_mode = 'a'
 
-    with open(os.path.join(path, 'valid_scores.txt'), file_mode) as f:
+    with open(file_path, file_mode) as f:
         f.write(f'Epoch {epoch}\n')
 
         for score_name, score in scores.items():

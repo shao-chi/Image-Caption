@@ -34,7 +34,7 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
     save_conf = True
 
     if torch.cuda.is_available():
-        device = '1'
+        device = '0'
     else:
         device = 'cpu'
     
@@ -80,7 +80,7 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
         if save_img:
             _, image_name = os.path.split(image_path)
             image_name = image_name.split('.')[0]
-            save_dir = Path(increment_path(Path('demo') / image_name, exist_ok=True))  # increment run
+            save_dir = Path(increment_path(Path('demo') / image_name / Path('YOLOv5'), exist_ok=True))  # increment run
             (save_dir).mkdir(parents=True, exist_ok=True)  # make dir
 
 

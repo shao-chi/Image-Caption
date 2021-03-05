@@ -1,31 +1,150 @@
 # preprocess
 MAX_LENGTH = 49
 WORD_COUNT_THRESHOLD = 5
-NUM_OBJECT = 20
-
-# model
+NUM_OBJECT = 36
 PAD_IDX = 0
 
-MODEL_NAME = 'maxlen49_20obj'
-OUTPUT_NAME = 'maxlen49_20obj_128_14b_16h'
+# IMAGE_MODEL = 'YOLOv5'
+IMAGE_MODEL = 'FasterRCNN'
+
+
+MODEL_NAME = 'maxlen49_36obj_1wordCount_frcnn'
+OUTPUT_NAME = 'maxlen49_36obj_1wordCount_frcnn_256_25b_32h'
 DATA_PATH = f'./data/{MODEL_NAME}'
 OUTPUT_PATH = f'./output/{OUTPUT_NAME}'
 WORD_TO_IDX_PATH = f'{DATA_PATH}/train/word_index.pkl'
 
 # encoder
 ENCODE_DIM_FEATURES = 2048
-ENCODE_DIM_POSITIONS = 84
+
+if IMAGE_MODEL == 'YOLOv5':
+    ENCODE_DIM_POSITIONS = 84
+elif IMAGE_MODEL == 'FasterRCNN':
+    ENCODE_DIM_POSITIONS = 95
 
 # solver
-NUM_EPOCH = 500
+NUM_EPOCH = 1000
 BATCH_SIZE = 64
-DROPOUT = 0.2
-LEARNING_RATE = 0.001
+DROPOUT = 0.4
+LEARNING_RATE = 0.00001
 LOG_PATH = f'./logs_{OUTPUT_NAME}/'
 
 
-if OUTPUT_NAME == 'maxlen49_20obj_128_14b_16h':
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_1024_25b_32h_mask':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+
+    # encoder
+    ENCODE_INPUT_SIZE = 1024
+    ENCODE_Q_K_DIM = 1024
+    ENCODE_V_DIM = 1024
+    ENCODE_HIDDEN_SIZE = 2048
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 1024
+    DECODE_INPUT_SIZE = 1024
+    DECODE_Q_K_DIM = 1024
+    DECODE_V_DIM = 1024
+    DECODE_HIDDEN_SIZE = 2048
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_frcnn_256_25b_32h':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'FasterRCNN'
+
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_mask':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_128_14b_16h_mask':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+
+    # encoder
+    ENCODE_INPUT_SIZE = 128
+    ENCODE_Q_K_DIM = 128
+    ENCODE_V_DIM = 128
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 1
+    ENCODE_NUM_HEADS = 16
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 128
+    DECODE_Q_K_DIM = 128
+    DECODE_V_DIM = 128
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 4
+    DECODE_NUM_HEADS = 16
+
+
+if OUTPUT_NAME == 'maxlen49_20obj_128_25b_32h':
     assert NUM_OBJECT == 20
+    assert IMAGE_MODEL == 'YOLOv5'
+
+    # encoder
+    ENCODE_INPUT_SIZE = 64
+    ENCODE_Q_K_DIM = 128
+    ENCODE_V_DIM = 128
+    ENCODE_HIDDEN_SIZE = 128
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 64
+    DECODE_Q_K_DIM = 128
+    DECODE_V_DIM = 128
+    DECODE_HIDDEN_SIZE = 128
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'maxlen49_20obj_128_14b_16h' or \
+        OUTPUT_NAME == 'maxlen49_20obj_128_14b_16h_mask' or \
+        OUTPUT_NAME == 'maxlen49_20obj_128_14b_16h_mask_slower':
+    assert NUM_OBJECT == 20
+    assert IMAGE_MODEL == 'YOLOv5'
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -47,13 +166,14 @@ if OUTPUT_NAME == 'maxlen49_20obj_128_14b_16h':
 
 if OUTPUT_NAME == 'maxlen49_64':
     assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
 
     # encoder
     ENCODE_INPUT_SIZE = 64
     ENCODE_Q_K_DIM = 64
     ENCODE_V_DIM = 64
     ENCODE_HIDDEN_SIZE = 64
-    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_BLOCKS = 1
     ENCODE_NUM_HEADS = 2
 
     # decoder
@@ -62,11 +182,12 @@ if OUTPUT_NAME == 'maxlen49_64':
     DECODE_Q_K_DIM = 64
     DECODE_V_DIM = 64
     DECODE_HIDDEN_SIZE = 64
-    DECODE_NUM_BLOCKS = 4
+    DECODE_NUM_BLOCKS = 3
     DECODE_NUM_HEADS = 2
 
 if OUTPUT_NAME == 'maxlen49_128':
     assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
 
     # encoder
     ENCODE_INPUT_SIZE = 64
@@ -87,6 +208,7 @@ if OUTPUT_NAME == 'maxlen49_128':
 
 if OUTPUT_NAME == 'maxlen49_128_14b':
     assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -107,6 +229,8 @@ if OUTPUT_NAME == 'maxlen49_128_14b':
 
 if OUTPUT_NAME == 'maxlen49_256_13b':
     assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+
     # encoder
     ENCODE_INPUT_SIZE = 128
     ENCODE_Q_K_DIM = 256
@@ -126,6 +250,7 @@ if OUTPUT_NAME == 'maxlen49_256_13b':
 
 if OUTPUT_NAME == 'maxlen49_128_14b_8h':
     assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -146,6 +271,7 @@ if OUTPUT_NAME == 'maxlen49_128_14b_8h':
 
 if OUTPUT_NAME == 'maxlen49_128_14b_16h':
     assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
 
     # encoder
     ENCODE_INPUT_SIZE = 128

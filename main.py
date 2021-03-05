@@ -1,19 +1,17 @@
 import os
-import pickle
 
 import cv2
 import fire
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import numpy as np
 
-from model import TRANSFORMER, DEVICE
+from core.models import TRANSFORMER, DEVICE
 from core.config import *
 from core.dataset import TrainDataset, TestDataset
-from core.utils import write_scores, save_pickle
+from core.utils import save_pickle, write_scores
 from core.evaluations import evaluate
 
 
@@ -144,7 +142,7 @@ def train():
 
         scores['train_loss'] = train_loss
         scores['valid_loss'] = valid_loss
-        write_scores(scores=scores, path=OUTPUT_PATH, epoch=epoch)
+        write_scores(scores=scores, path=OUTPUT_PATH, epoch=epoch, split='valid')
 
         writer.add_scalars('LOSS/EPOCH', {'Train': scores['train_loss'],
                                           'Valid': scores['valid_loss']}, epoch)
@@ -187,10 +185,11 @@ def evaluation(split='test', epoch=90, beam_size=None):
     save_pickle(test_caption,
                 str(os.path.join(target_dir, f"{split}.candidate.captions.pkl")))
 
-    evaluate(target_dir=target_dir,
-             data_path=DATA_PATH,
-             split=split,
-             get_scores=False)
+    scores = evaluate(target_dir=target_dir,
+                      data_path=DATA_PATH,
+                      split=split,
+                      get_scores=True)
+    write_scores(scores=scores, path=OUTPUT_PATH, epoch=epoch, split=split)
 
 
 def demo(image_path, beam_size=None, epoch=90):
@@ -226,15 +225,15 @@ def demo(image_path, beam_size=None, epoch=90):
                 zeros_mask = cv2.rectangle(zeros, c1, c2,
                                         color=(255, 255, 255),
                                         thickness=-1)
-                img = cv2.addWeighted(img, 1, zeros_mask, 1-obj_attend, gamma=0)
+                img = cv2.addWeighted(img, 1, zeros_mask, obj_attend, gamma=0)
 
-            cv2.imwrite(f'./demo/{image_dir}/{i+1}_{image_name}', img)
+            cv2.imwrite(f'./demo/{image_dir}/{IMAGE_MODEL}/{i+1}_{image_name}', img)
 
             if i == (caption_length - 1):
                 break
     
     print("Generated Caption:", caption)
-
+    
 
 if __name__ == '__main__':
     fire.Fire()

@@ -62,13 +62,17 @@ class Transformer(nn.Module):
     def forward(self, object_features,
                       position_features,
                       target_caption):
+        context_attention_mask = self.get_attention_key_pad_mask(k=position_features,
+                                                                 q=target_caption[:, :-1])
+
         encode_output, _ = self.encoder(object_features=object_features,
                                         position_features=position_features)
 
         input_caption = target_caption[:, :-1].clone().long()
         target_caption = target_caption[:, 1:].clone().long().contiguous().view(-1)
         decode_output, _, _ = self.decoder(caption_vector=input_caption,
-                                           encode_output=encode_output)
+                                           encode_output=encode_output,
+                                           context_attention_mask=context_attention_mask)
         output = self.classifer(decode_output)
 
         loss = self.loss(output.view(-1, output.size(2)), target_caption)
@@ -91,9 +95,13 @@ class Transformer(nn.Module):
             attention_list = []
             for t in range(self.max_length-1):
                 decode_input = input_caption[:, :t+1].clone()
+                context_attention_mask = self.get_attention_key_pad_mask(k=position_features,
+                                                                         q=decode_input)
+
                 decode_output, _, attention = self.decoder(
                                                    caption_vector=decode_input,
-                                                   encode_output=encode_output)
+                                                   encode_output=encode_output,
+                                                   context_attention_mask=context_attention_mask)
                 attention_list.append(np.mean(attention.cpu().numpy()[:, :, t], axis=1))
 
                 output = decode_output[:, t]
@@ -120,9 +128,13 @@ class Transformer(nn.Module):
 
             input_caption[:, :, 0] = 1
             decode_input = input_caption[0, :, :1].clone()
-            decode_output, _, _ = self.decoder(
-                                                    caption_vector=decode_input,
-                                                    encode_output=encode_output)
+
+            context_attention_mask = self.get_attention_key_pad_mask(k=position_features,
+                                                                     q=decode_input)
+
+            decode_output, _, _ = self.decoder(caption_vector=decode_input,
+                                               encode_output=encode_output,
+                                               context_attention_mask=context_attention_mask)
             output = decode_output[:, 0]
             output = self.classifer(output)
             output = self.softmax(output)
@@ -141,9 +153,12 @@ class Transformer(nn.Module):
 
                 for b in range(beam_size):
                     decode_input = input_caption[b, :, :t+1].clone()
+                    context_attention_mask = self.get_attention_key_pad_mask(k=position_features,
+                                                                             q=decode_input)
                     decode_output, _, _ = self.decoder(
                                                     caption_vector=decode_input,
-                                                    encode_output=encode_output)
+                                                    encode_output=encode_output,
+                                                    context_attention_mask=context_attention_mask)
 
                     output = decode_output[:, t]
                     output = self.classifer(output)
@@ -165,6 +180,15 @@ class Transformer(nn.Module):
                 input_caption[:, :, t+1] = topk_index % self.num_vocab
 
         return input_caption[0]
+
+    def get_attention_key_pad_mask(self, k, q):
+        assert k.size(0) == q.size(0)
+
+        batch_size = k.size(0)
+        mask = torch.count_nonzero(k, dim=2).eq(0)
+        mask = mask.unsqueeze(1).expand(batch_size, q.size(1), k.size(1))  # b x lq x lk
+
+        return mask
 
 
 class Encoder(nn.Module):
@@ -193,21 +217,30 @@ class Encoder(nn.Module):
                     for _ in range(num_blocks)])
 
     def forward(self, object_features, position_features):
+        attention_mask = self.get_attention_key_pad_mask(k=position_features,
+                                                         q=position_features)
+
         embedded_position = self.position_embedding(position_features)
-        # output = object_features + embedded_position
 
         embedded_feature = self.feature_embedding(object_features)
         output = embedded_feature + embedded_position
         output = self.norm(output)
-        # output = torch.cat((embedded_feature, embedded_position), 2)
-
-        # attention_list = None
+        
         attention_list = []
         for block in self.encoder:
             output, attention = block(encode_input=output)
             attention_list += [attention]
 
         return output, attention_list
+
+    def get_attention_key_pad_mask(self, k, q):
+        assert k.size(0) == q.size(0)
+
+        batch_size = k.size(0)
+        mask = torch.count_nonzero(k, dim=2).eq(0)
+        mask = mask.unsqueeze(1).expand(batch_size, q.size(1), k.size(1))  # b x lq x lk
+
+        return None
 
 
 class Decoder(nn.Module):
@@ -253,14 +286,14 @@ class Decoder(nn.Module):
                              dropout=dropout)
                     for _ in range(num_blocks)])
 
-    def forward(self, caption_vector, encode_output):
-        non_pad_mask = get_non_pad_mask(sequence=caption_vector)
+    def forward(self, caption_vector, encode_output, context_attention_mask=None):
+        # non_pad_mask = get_non_pad_mask(sequence=caption_vector)
 
         self_attention_mask_subsequent = \
-                get_subsequent_mask(sequence=caption_vector)
+                self.get_subsequent_mask(sequence=caption_vector)
         self_attention_mask_key_pad = \
-                get_attention_key_pad_mask(k=caption_vector,
-                                           q=caption_vector)
+                self.get_attention_key_pad_mask(k=caption_vector,
+                                                q=caption_vector)
         self_attention_mask = \
                 (self_attention_mask_key_pad + self_attention_mask_subsequent) \
                     .gt(0)
@@ -272,18 +305,41 @@ class Decoder(nn.Module):
         decode_output = self.norm(decode_output)
 
         decode_attention_list = []
-        decode_encode_attention_list = []
+        context_attention_list = []
         for block in self.decoder:
-            decode_output, decode_attention, decode_encode_attention = \
+            decode_output, decode_attention, context_attention = \
                 block(decode_input=decode_output,
                       encode_output=encode_output,
-                      non_pad_mask=non_pad_mask,
-                      self_attention_mask=self_attention_mask)
+                    #   non_pad_mask=None,
+                      self_attention_mask=self_attention_mask,
+                      context_attention_mask=context_attention_mask)
 
             decode_attention_list += [decode_attention]
-            decode_encode_attention_list += [decode_encode_attention]
+            context_attention_list += [context_attention]
 
-        return decode_output, decode_attention, decode_encode_attention
+        return decode_output, decode_attention, context_attention
+
+    def get_attention_key_pad_mask(self, k, q):
+        assert k.size(0) == q.size(0)
+
+        batch_size = k.size(0)
+        mask = k.eq(PAD_IDX)
+        mask = mask.unsqueeze(1).expand(batch_size, q.size(1), k.size(1))  # b x lq x lk
+
+        return mask
+
+    def get_subsequent_mask(self, sequence):
+        batch_size, sequence_length = sequence.size()
+
+        subsequent_mask = torch.triu(torch.ones((sequence_length, sequence_length),
+                                                device=sequence.device,
+                                                dtype=torch.uint8),
+                                    diagonal=1)
+        subsequent_mask = subsequent_mask \
+                            .unsqueeze(0) \
+                            .expand(batch_size, sequence_length, sequence_length)  # b x ls x ls
+
+        return subsequent_mask
 
 
 class PositionalEncoding(nn.Module):
@@ -317,31 +373,15 @@ class PositionalEncoding(nn.Module):
         return x + self.pos_table[:, :x.size(1)].clone().detach()
 
 
-def get_attention_key_pad_mask(k, q):
-    mask = k.eq(PAD_IDX)
-    mask = mask.unsqueeze(1).expand(-1, q.size(1), -1)  # b x lq x lk
+# def get_non_pad_mask(sequence):
+#     assert sequence.dim() == 2
 
-    return mask
+#     return sequence.ne(PAD_IDX).type(torch.float).unsqueeze(-1)
 
-def get_non_pad_mask(sequence):
-    assert sequence.dim() == 2
 
-    return sequence.ne(PAD_IDX).type(torch.float).unsqueeze(-1)
+# def get_pos_onehot(length):
+#     onehot = torch.zeros(length, length)
+#     idxs = torch.arange(length).long().view(-1, 1)
+#     onehot.scatter_(1, idxs, 1)
 
-def get_subsequent_mask(sequence):
-    batch_size, sequence_length = sequence.size()
-
-    subsequent_mask = torch.triu(torch.ones((sequence_length, sequence_length),
-                                            device=sequence.device,
-                                            dtype=torch.uint8),
-                                diagonal=1)
-    subsequent_mask = subsequent_mask.unsqueeze(0).expand(batch_size, -1, -1)  # b x ls x ls
-
-    return subsequent_mask
-
-def get_pos_onehot(length):
-    onehot = torch.zeros(length, length)
-    idxs = torch.arange(length).long().view(-1, 1)
-    onehot.scatter_(1, idxs, 1)
-
-    return onehot
+#     return onehot

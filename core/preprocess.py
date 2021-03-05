@@ -1,59 +1,112 @@
 import os
-import logging
 
 import cv2
 import ujson
-import hickle
 import torch
 import torch.nn as nn
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from PIL import Image
-import gluonnlp as nlp
-import mxnet as mx
 from nltk.parse import CoreNLPParser
 from collections import Counter
 from torchvision import transforms
 from torchvision.models import resnet101
-from torch.utils.data.dataloader import DataLoader
+from torchvision.models.detection import fasterrcnn_resnet50_fpn
 
 from data.detect_for_preprocess import get_boxes
 from data.yolov5.utils.datasets import LoadImages
-from core.utils import *
-from core.config import MAX_LENGTH, WORD_COUNT_THRESHOLD, DATA_PATH, NUM_OBJECT, \
-                        ENCODE_DIM_FEATURES, ENCODE_DIM_POSITIONS
-
-
-if torch.cuda.is_available():
-    DEVICE = torch.device("cuda:1")
-else:
-    DEVICE = torch.device("cpu")
-
+from core.config import NUM_OBJECT, ENCODE_DIM_FEATURES, ENCODE_DIM_POSITIONS, IMAGE_MODEL
 
 parser = CoreNLPParser(url='http://localhost:9000')
 # lemmatizer = WordNetLemmatizer()
 
-# TODO: Faster R-CNN
+if torch.cuda.is_available():
+    device_name = "cuda:1"
+
+    if IMAGE_MODEL == 'FasterRCNN':
+        frcnn_device = "cuda:2"
+
+else:
+    device_name = "cpu"
+    frcnn_device = "cpu"
+
+DEVICE = torch.device(device_name)
+FRCNN_DEVICE = torch.device(frcnn_device)
+print(f'Using {device_name} for ResNet101 and {frcnn_device} for FasterRCNN\n')
+
 class ResnetExtractor(nn.Module):
     def __init__(self):
         super(ResnetExtractor, self).__init__()
-        submodule = resnet101(pretrained=True)
-        # self.extracted_layer = extracted_layer
-        modules = list(submodule.children())[:9]
-        # print(modules)
+        norm_mean = [0.485, 0.456, 0.406]
+        norm_std = [0.229, 0.224, 0.225]
 
-        self.submodule = nn.Sequential(*modules)
+        self.size = 224
+        self.tfms = transforms.Compose([transforms.ToTensor(),
+                                        transforms.Normalize(norm_mean, norm_std),])
+
+        submodule = resnet101(pretrained=True)
+        modules = list(submodule.children())[:9]
+
+        self.submodule = nn.Sequential(*modules).to(DEVICE)
 
     def forward(self, x):
-        x = self.submodule(x)
+        x = self.submodule(x.to(DEVICE))
         x = x.flatten(1)
-        return x
+
+        return x.cpu().numpy()
+
+    def transform(self, image):
+        image_resized = cv2.resize(image, (self.size, self.size), \
+                                  interpolation=cv2.INTER_CUBIC)
+        image_resized = self.tfms( \
+            Image.fromarray(cv2.cvtColor(image_resized, cv2.COLOR_BGR2RGB))
+        ).unsqueeze(0)
+
+        return image_resized
+
+    @property
+    def transforms(self):
+        return self.tfms
+
+    @property
+    def image_size(self):
+        return self.size
 
 
-def image_feature(image_path, model, transforms, image_size,
-                  num_obj=NUM_OBJECT, save_img=False):
+class FasterRCNNExtractor:
+    def __init__(self):
+        super(FasterRCNNExtractor, self).__init__()
+        self.transform = transforms.Compose([transforms.ToTensor()])
+
+        self.submodule = fasterrcnn_resnet50_fpn(pretrained=True).to(FRCNN_DEVICE)
+        self.submodule.eval()
+
+    def get_boxes(self, image_path, num_obj):
+        image = self.load_image(image_path)
+        features = self.submodule(image.to(FRCNN_DEVICE))[0]
+
+        return features['boxes'].cpu().detach().numpy()[:num_obj], \
+                features['scores'].cpu().detach().numpy()[:num_obj], \
+                features['labels'].cpu().detach().numpy()[:num_obj]
+
+    def load_image(self, image_path):
+        image = cv2.imread(image_path)
+        image = self.transform(image)
+        image = image.view(1, *image.shape)
+
+        return image
+
+# TODO: VGG19
+
+
+def image_feature_YOLOv5(image_path, num_obj=NUM_OBJECT, save_img=False):
+    assert IMAGE_MODEL == 'YOLOv5'
+
     weights = './data/yolov5/yolov5x.pt'
+    model = ResnetExtractor()
+    image_size = model.image_size
+    transforms = model.transforms
     img_tensor, positions, xyxy = get_boxes(weights,
                                             image_path=image_path,
                                             num_obj=num_obj*2,
@@ -66,11 +119,7 @@ def image_feature(image_path, model, transforms, image_size,
 
     dataset = LoadImages(image_path, img_size=640)
     for _, _, im0s, _ in dataset:
-        im0s_resized = cv2.resize(im0s, (image_size, image_size), \
-                                  interpolation=cv2.INTER_CUBIC)
-        im0s_resized = transforms( \
-            Image.fromarray(cv2.cvtColor(im0s_resized, cv2.COLOR_BGR2RGB))
-        ).unsqueeze(0)
+        im0s_resized = model.transform(image=im0s)
 
         if len(img_tensor) == 0:
             img_tensor = im0s_resized
@@ -86,10 +135,11 @@ def image_feature(image_path, model, transforms, image_size,
                 positions += [([0] * ENCODE_DIM_POSITIONS)]
 
         with torch.no_grad():
-            features = model(img_tensor.to(DEVICE)).cpu().numpy()
+            features = model(img_tensor)
 
         if features.shape[0] < num_obj + 1:
-            features = np.concatenate([features, np.zeros((num_obj + 1 - features.shape[0], ENCODE_DIM_FEATURES))])
+            features = np.concatenate([features, \
+                    np.zeros((num_obj + 1 - features.shape[0], ENCODE_DIM_FEATURES))])
 
         all_features.append(features)
         all_positions.append(positions)
@@ -97,7 +147,85 @@ def image_feature(image_path, model, transforms, image_size,
     return np.array(all_features), np.array(all_positions), xyxy
 
 
-def _process_caption_data(caption_file, image_dir, max_length):
+def image_feature_FasterRCNN(image_path, num_obj=NUM_OBJECT, save_img=False):
+    assert IMAGE_MODEL == 'FasterRCNN'
+
+    fasterRCNN_model = FasterRCNNExtractor()
+    resnet_model = ResnetExtractor()
+    boxes, scores, labels = fasterRCNN_model.get_boxes(image_path, num_obj)
+
+    image = cv2.imread(image_path)
+    img_tensor = resnet_model.transform(image=image)
+    positions = [[0, 0, 1, 1] + [0] * 91]
+
+    if save_img:
+        labels_txt = []
+        coco_names = open('./data/coco_labels.txt', 'r').read().split('\n')
+
+    for index, (x1, y1, x2, y2) in enumerate(boxes):
+        label_id = labels[index] - 1
+
+        position = [y1 / image.shape[0], y2 / image.shape[0],
+                    x1 / image.shape[1], x2 / image.shape[1]]
+        label = [0] * 91
+        label[label_id] = scores[index]
+        positions += [position + label]
+
+        obj_image = image[int(y1):int(y2), int(x1):int(x2)]
+        obj_transformed = resnet_model.transform(image=obj_image)
+        img_tensor = torch.cat([img_tensor, obj_transformed])
+
+        if save_img:
+            cv2.rectangle(image, (int(x1), int(y1)),
+                          (int(x2), np.int32(y2)), (0, 255, 255), 1, 8, 0)
+            label_name = coco_names[label_id]
+            font_scale = 0.3
+            thickness = 1
+            text = f'{label_name} {str(scores[index])[:4]}'
+            text_width, text_height = \
+                    cv2.getTextSize(text=text,
+                                    fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                                    fontScale=font_scale,
+                                    thickness=thickness)[0]
+            cv2.rectangle(img=image,
+                          pt1=(int(x1) - 2, int(y1) + 2),
+                          pt2=(int(x1) + text_width + 2, int(y1) - text_height - 2),
+                          color=(255, 50, 255),
+                          thickness=cv2.FILLED)
+            cv2.putText(img=image, text=text, org=(int(x1), int(y1)),
+                        fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                        fontScale=font_scale,
+                        color=(255, 255, 255),
+                        thickness=thickness,
+                        lineType=cv2.LINE_AA)
+            labels_txt.append(f'{label_name} {x1} {y1} {x2} {y2}')
+
+    if save_img:
+        name = os.path.basename(image_path)[:-4]
+        write_dir = f'./demo/{name}/FasterRCNN'
+        if not os.path.exists(write_dir):
+            os.makedirs(write_dir)
+        cv2.imwrite(f'{write_dir}/frcnn_{name}.jpg', image)
+
+        labels_txt = '\n'.join(labels_txt)
+        with open(f'{write_dir}/labels_{name}.txt', 'w') as txt_file:
+            txt_file.write(labels_txt)
+
+    with torch.no_grad():
+        features = resnet_model(img_tensor)
+
+    if features.shape[0] < num_obj + 1:
+        features = np.concatenate([features, \
+                    np.zeros((num_obj + 1 - features.shape[0], ENCODE_DIM_FEATURES))])
+
+    if len(positions) < num_obj + 1:
+        for _ in range(num_obj + 1 - len(positions)):
+            positions += [([0] * ENCODE_DIM_POSITIONS)]
+
+    return np.array([features]), np.array([positions]), boxes
+
+
+def process_caption_data(caption_file, image_dir, max_length):
     print(f'Processing {caption_file} ...', end=' ')
 
     with open(caption_file) as f:
@@ -156,7 +284,7 @@ def _process_caption_data(caption_file, image_dir, max_length):
 
     return caption_data
 
-def _build_vocab(annotations, threshold=1):
+def build_vocab(annotations, threshold=1):
     full_vocabulary = Counter()
     max_length = 0
 
@@ -187,7 +315,7 @@ def _build_vocab(annotations, threshold=1):
     return word_index
 
 
-def _build_caption_vector(annotations, word_index, max_length=24):
+def build_caption_vector(annotations, word_index, max_length=24):
     n_examples = len(annotations)
     captions = np.ndarray((n_examples, max_length+2)).astype(np.int32)
 
@@ -221,7 +349,7 @@ def _build_caption_vector(annotations, word_index, max_length=24):
     return captions
 
 
-def _build_file_names(annotations):
+def build_file_names(annotations):
     image_file_names = []
     id_index = {}
     index = 0
@@ -241,121 +369,10 @@ def _build_file_names(annotations):
     return file_names, id_index
 
 
-def _build_image_indices(annotations, id_index):
+def build_image_indices(annotations, id_index):
     image_indices = np.ndarray(len(annotations), dtype=np.int32)
     image_ids = annotations['image_id']
     for i, image_id in enumerate(image_ids):
         image_indices[i] = id_index[image_id]
 
     return image_indices
-
-
-if __name__ == "__main__":
-    # maximum length of caption(number of word). 
-    # if caption is longer than max_length, deleted.
-    max_length = MAX_LENGTH
-    # if word occurs less than word_count_threshold in training dataset, 
-    # the word index is special unknown token.
-    word_count_threshold = WORD_COUNT_THRESHOLD
-
-    caption_path = DATA_PATH
-    if not os.path.exists(caption_path):
-        for split in ['train', 'valid', 'test']:
-            os.makedirs(os.path.join(caption_path, split))
-
-    # about 110000 images and 5500000 captions for train dataset
-    train_dataset = _process_caption_data(
-        caption_file='../raw_data/MSCOCO/annotations/captions_train2017.json',
-        image_dir='../raw_data/MSCOCO/image/train2017/',
-        max_length=max_length)
-
-    # about 5000 images and 25000 captions
-    valid_dataset = _process_caption_data(
-        caption_file='../raw_data/MSCOCO/annotations/captions_val2017.json',
-        image_dir='../raw_data/MSCOCO/image/val2017/',
-        max_length=max_length)
-
-    # about 2500 images and 2500 captions for val / test dataset
-    valid_cutoff = int(0.5 * len(valid_dataset))
-    test_cutoff = int(len(valid_dataset))
-    print('Finished processing caption data')
-
-    save_pickle(train_dataset, f'{caption_path}/train/train.annotations.pkl')
-    save_pickle(valid_dataset[:valid_cutoff], f'{caption_path}/valid/valid.annotations.pkl')
-    save_pickle(valid_dataset[valid_cutoff:test_cutoff].reset_index(drop=True),
-            f'{caption_path}/test/test.annotations.pkl')
-
-    model = ResnetExtractor().to(DEVICE)
-    model.eval()
-    image_size = 224
-    norm_mean = [0.485, 0.456, 0.406]
-    norm_std = [0.229, 0.224, 0.225]
-    tfms = transforms.Compose([transforms.ToTensor(),
-                               transforms.Normalize(norm_mean, norm_std),])
-
-    for split in ['train', 'valid', 'test']:
-        annotations = load_pickle(f'{caption_path}/{split}/{split}.annotations.pkl')
-
-        if split == 'train':
-            word_index = _build_vocab(annotations=annotations,
-                                      threshold=word_count_threshold)
-            save_pickle(word_index, f'{caption_path}/train/word_index.pkl')
-
-        captions = _build_caption_vector(annotations=annotations,
-                                         word_index=word_index,
-                                         max_length=max_length)
-        save_pickle(captions, f'{caption_path}/{split}/{split}.captions.pkl')
-
-        file_names, id_index = _build_file_names(annotations=annotations)
-        save_pickle(file_names, f'{caption_path}/{split}/{split}.file.names.pkl')
-
-        image_indices = _build_image_indices(annotations=annotations,
-                                             id_index=id_index)
-        save_pickle(image_indices, f'{caption_path}/{split}/{split}.image.indices.pkl')
-
-        # prepare reference captions to compute bleu scores later
-        image_ids = {}
-        feature_to_captions = {}
-
-        i = -1
-        for caption, image_id in zip(annotations['caption'], annotations['image_id']):
-            if not image_id in image_ids:
-                image_ids[image_id] = 0
-
-                i += 1
-                feature_to_captions[i] = []
-
-            feature_to_captions[i].append(caption.lower() + ' .')
-
-        save_pickle(feature_to_captions, f'{caption_path}/{split}/{split}.references.pkl')
-        print(f"Finished building {split} caption dataset")
-
-        # image features
-        print(f"Building {split} image features...")
-        image_path = list(annotations['file_name'].unique())
-        n_examples = len(image_path)
-
-        # i = 0
-        # sp = 10000
-        all_feats = np.ndarray([n_examples, NUM_OBJECT+1, ENCODE_DIM_FEATURES],
-                               dtype=np.float32)
-        all_posit = np.ndarray([n_examples, NUM_OBJECT+1, ENCODE_DIM_POSITIONS],
-                               dtype=np.float32)
-
-        feats_save_path = f'{caption_path}/{split}/{split}.features.hkl'
-        posit_save_path = f'{caption_path}/{split}/{split}.positions.hkl'
-        print(f"{feats_save_path}")
-        
-        for start, path in enumerate(tqdm(image_path)):
-            features, positions, _ = image_feature(image_path=path,
-                                                   model=model,
-                                                   transforms=tfms,
-                                                   image_size=image_size)
-            end = start + 1
-            all_feats[start:end, :] = features
-            all_posit[start:end, :] = positions
-
-        # use hickle to save huge feature vectors
-        hickle.dump(all_feats, feats_save_path)
-        hickle.dump(all_posit, posit_save_path)
-        # print(f"Saved {save_path}..")
