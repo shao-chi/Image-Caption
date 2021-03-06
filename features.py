@@ -4,12 +4,14 @@ import cv2
 import hickle
 import numpy as np
 from tqdm import tqdm
+from torch.utils.data import DataLoader
 
 from core.preprocess import *
 from core.utils import save_pickle, load_pickle
 from core.config import DATA_PATH, IMAGE_MODEL, ENCODE_DIM_FEATURES, \
                         ENCODE_DIM_POSITIONS, NUM_OBJECT, MAX_LENGTH, \
                         WORD_COUNT_THRESHOLD
+from core.dataset import ImagePreprocessDataset
 
 if __name__ == '__main__':
     if not os.path.exists(DATA_PATH):
@@ -86,6 +88,14 @@ if __name__ == '__main__':
         image_path = list(annotations['file_name'].unique())
         n_examples = len(image_path)
 
+        batch_size = 100
+        image_dataset = ImagePreprocessDataset(path_list=image_path,
+                                               model=IMAGE_MODEL)
+        image_dataloader = DataLoader(image_dataset,
+                                      batch_size=batch_size,
+                                      shuffle=False,
+                                      num_workers=1)
+
         # i = 0
         # sp = 10000
         all_feats = np.ndarray([n_examples, NUM_OBJECT+1, ENCODE_DIM_FEATURES],
@@ -97,13 +107,9 @@ if __name__ == '__main__':
         posit_save_path = f'{DATA_PATH}/{split}/{split}.positions.hkl'
         print(f"Start saving {feats_save_path}")
         
-        for start, path in enumerate(tqdm(image_path)):
-            if IMAGE_MODEL == 'YOLOv5':
-                features, positions, _ = image_feature_YOLOv5(image_path=path)
-            elif IMAGE_MODEL == 'FasterRCNN':
-                features, positions, _ = image_feature_FasterRCNN(image_path=path)
-
-            end = start + 1
+        for start, (features, positions) in enumerate(tqdm(image_dataloader)):
+            start = start * batch_size
+            end = start + len(positions)
             all_feats[start:end, :] = features
             all_posit[start:end, :] = positions
 

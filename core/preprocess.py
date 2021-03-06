@@ -13,6 +13,7 @@ from collections import Counter
 from torchvision import transforms
 from torchvision.models import resnet101
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
+from torch.multiprocessing import set_start_method
 
 from data.detect_for_preprocess import get_boxes
 from data.yolov5.utils.datasets import LoadImages
@@ -22,6 +23,8 @@ parser = CoreNLPParser(url='http://localhost:9000')
 # lemmatizer = WordNetLemmatizer()
 
 if torch.cuda.is_available():
+    set_start_method('spawn', force=True)
+
     device_name = "cuda:1"
 
     if IMAGE_MODEL == 'FasterRCNN':
@@ -114,9 +117,6 @@ def image_feature_YOLOv5(image_path, num_obj=NUM_OBJECT, save_img=False):
                                             image_size=image_size,
                                             save_img=save_img)
 
-    all_features = []
-    all_positions = []
-
     dataset = LoadImages(image_path, img_size=640)
     for _, _, im0s, _ in dataset:
         im0s_resized = model.transform(image=im0s)
@@ -141,10 +141,7 @@ def image_feature_YOLOv5(image_path, num_obj=NUM_OBJECT, save_img=False):
             features = np.concatenate([features, \
                     np.zeros((num_obj + 1 - features.shape[0], ENCODE_DIM_FEATURES))])
 
-        all_features.append(features)
-        all_positions.append(positions)
-
-    return np.array(all_features), np.array(all_positions), xyxy
+    return np.array(features), np.array(positions), np.array(xyxy)
 
 
 def image_feature_FasterRCNN(image_path, num_obj=NUM_OBJECT, save_img=False):
@@ -172,7 +169,10 @@ def image_feature_FasterRCNN(image_path, num_obj=NUM_OBJECT, save_img=False):
         positions += [position + label]
 
         obj_image = image[int(y1):int(y2), int(x1):int(x2)]
-        obj_transformed = resnet_model.transform(image=obj_image)
+        try:
+            obj_transformed = resnet_model.transform(image=obj_image)
+        except:
+            continue
         img_tensor = torch.cat([img_tensor, obj_transformed])
 
         if save_img:
@@ -222,7 +222,7 @@ def image_feature_FasterRCNN(image_path, num_obj=NUM_OBJECT, save_img=False):
         for _ in range(num_obj + 1 - len(positions)):
             positions += [([0] * ENCODE_DIM_POSITIONS)]
 
-    return np.array([features]), np.array([positions]), boxes
+    return np.array(features), np.array(positions), boxes
 
 
 def process_caption_data(caption_file, image_dir, max_length):

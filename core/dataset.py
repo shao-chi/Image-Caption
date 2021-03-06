@@ -2,6 +2,7 @@ import hickle
 from torch.utils.data import Dataset
 
 from core.utils import load_pickle, load_coco_data
+from core.preprocess import image_feature_YOLOv5, image_feature_FasterRCNN
 
 class TrainDataset(Dataset):
     def __init__(self, data_path, split):
@@ -48,3 +49,22 @@ class TestDataset(Dataset):
     @property
     def data_dict(self):
         return self.data
+
+
+class ImagePreprocessDataset(Dataset):
+    def __init__(self, path_list, model):
+        self.path_list = path_list
+        self.model = model
+
+    def __getitem__(self, index):
+        path = self.path_list[index]
+
+        if self.model == 'YOLOv5':
+            features, positions, _ = image_feature_YOLOv5(image_path=path)
+        elif self.model == 'FasterRCNN':
+            features, positions, _ = image_feature_FasterRCNN(image_path=path)
+
+        return features, positions
+
+    def __len__(self):
+        return len(self.path_list)

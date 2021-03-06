@@ -195,8 +195,8 @@ def evaluation(split='test', epoch=90, beam_size=None):
 def demo(image_path, beam_size=None, epoch=90):
     features, positions, xyxy = MODEL.preprocess(image_path=image_path)
     
-    feature = torch.FloatTensor(features).to(DEVICE)
-    position = torch.FloatTensor(positions).to(DEVICE)
+    feature = torch.FloatTensor(features).unsqueeze(0).to(DEVICE)
+    position = torch.FloatTensor(positions).unsqueeze(0).to(DEVICE)
 
     model_path = os.path.join(OUTPUT_PATH, f'model/model_{epoch}.pt')
 
