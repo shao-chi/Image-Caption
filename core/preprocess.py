@@ -13,30 +13,15 @@ from collections import Counter
 from torchvision import transforms
 from torchvision.models import resnet101
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
-from torch.multiprocessing import set_start_method
 
 from data.detect_for_preprocess import get_boxes
 from data.yolov5.utils.datasets import LoadImages
-from core.config import NUM_OBJECT, ENCODE_DIM_FEATURES, ENCODE_DIM_POSITIONS, IMAGE_MODEL
+from core.config import NUM_OBJECT, ENCODE_DIM_FEATURES, ENCODE_DIM_POSITIONS, \
+                        IMAGE_MODEL, RESNET_DEVICE, FRCNN_DEVICE
 
 parser = CoreNLPParser(url='http://localhost:9000')
 # lemmatizer = WordNetLemmatizer()
 
-if torch.cuda.is_available():
-    set_start_method('spawn', force=True)
-
-    device_name = "cuda:1"
-
-    if IMAGE_MODEL == 'FasterRCNN':
-        frcnn_device = "cuda:2"
-
-else:
-    device_name = "cpu"
-    frcnn_device = "cpu"
-
-DEVICE = torch.device(device_name)
-FRCNN_DEVICE = torch.device(frcnn_device)
-print(f'Using {device_name} for ResNet101 and {frcnn_device} for FasterRCNN\n')
 
 class ResnetExtractor(nn.Module):
     def __init__(self):
@@ -51,10 +36,10 @@ class ResnetExtractor(nn.Module):
         submodule = resnet101(pretrained=True)
         modules = list(submodule.children())[:9]
 
-        self.submodule = nn.Sequential(*modules).to(DEVICE)
+        self.submodule = nn.Sequential(*modules).to(RESNET_DEVICE)
 
     def forward(self, x):
-        x = self.submodule(x.to(DEVICE))
+        x = self.submodule(x.to(RESNET_DEVICE))
         x = x.flatten(1)
 
         return x.cpu().numpy()
@@ -141,7 +126,9 @@ def image_feature_YOLOv5(image_path, num_obj=NUM_OBJECT, save_img=False):
             features = np.concatenate([features, \
                     np.zeros((num_obj + 1 - features.shape[0], ENCODE_DIM_FEATURES))])
 
-    return np.array(features), np.array(positions), np.array(xyxy)
+    return np.array(features).astype(float), \
+            np.array(positions).astype(float), \
+            np.array(xyxy)
 
 
 def image_feature_FasterRCNN(image_path, num_obj=NUM_OBJECT, save_img=False):
@@ -222,7 +209,9 @@ def image_feature_FasterRCNN(image_path, num_obj=NUM_OBJECT, save_img=False):
         for _ in range(num_obj + 1 - len(positions)):
             positions += [([0] * ENCODE_DIM_POSITIONS)]
 
-    return np.array(features), np.array(positions), boxes
+    return np.array(features).astype(float), \
+            np.array(positions).astype(float), \
+            boxes
 
 
 def process_caption_data(caption_file, image_dir, max_length):

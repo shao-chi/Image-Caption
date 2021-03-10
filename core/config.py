@@ -1,3 +1,6 @@
+import torch
+from torch.multiprocessing import set_start_method
+
 # preprocess
 MAX_LENGTH = 49
 WORD_COUNT_THRESHOLD = 5
@@ -7,12 +10,34 @@ PAD_IDX = 0
 # IMAGE_MODEL = 'YOLOv5'
 IMAGE_MODEL = 'FasterRCNN'
 
+MOVE_FIRST_IMAGE_FAETURE = False
 
 MODEL_NAME = 'maxlen49_36obj_1wordCount_frcnn'
 OUTPUT_NAME = 'maxlen49_36obj_1wordCount_frcnn_256_25b_32h'
 DATA_PATH = f'./data/{MODEL_NAME}'
 OUTPUT_PATH = f'./output/{OUTPUT_NAME}'
 WORD_TO_IDX_PATH = f'{DATA_PATH}/train/word_index.pkl'
+
+print('Data :', MODEL_NAME)
+print('Model : ', OUTPUT_NAME)
+
+if torch.cuda.is_available():
+    set_start_method('spawn', force=True)
+
+    device_name = "cuda:0"
+    resnet_device = "cuda:1"
+    frcnn_device = "cuda:2"
+
+else:
+    device_name = "cpu"
+    frcnn_device = "cpu"
+    resnet_device = "cpu"
+
+RESNET_DEVICE = torch.device(resnet_device)
+FRCNN_DEVICE = torch.device(frcnn_device)
+DEVICE = torch.device(device_name)
+print(f'Using {resnet_device} for ResNet101 and {frcnn_device} for FasterRCNN\n')
+print(f'Using {device_name} for training model.')
 
 # encoder
 ENCODE_DIM_FEATURES = 2048
@@ -26,13 +51,36 @@ elif IMAGE_MODEL == 'FasterRCNN':
 NUM_EPOCH = 1000
 BATCH_SIZE = 64
 DROPOUT = 0.4
-LEARNING_RATE = 0.00001
+LEARNING_RATE = 0.00005
 LOG_PATH = f'./logs_{OUTPUT_NAME}/'
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_move':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert MOVE_FIRST_IMAGE_FAETURE
+    
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
 
 
 if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_1024_25b_32h_mask':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 1024
@@ -55,6 +103,7 @@ if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_1024_25b_32h_mask':
 if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_frcnn_256_25b_32h':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'FasterRCNN'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 256
@@ -73,10 +122,34 @@ if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_frcnn_256_25b_32h':
     DECODE_NUM_BLOCKS = 5
     DECODE_NUM_HEADS = 32
 
-
-if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_mask':
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_66b_32h':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
+
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 6
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 6
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_mask' \
+        or OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_NoBias':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 256
@@ -99,6 +172,7 @@ if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_mask':
 if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_128_14b_16h_mask':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -121,6 +195,7 @@ if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_128_14b_16h_mask':
 if OUTPUT_NAME == 'maxlen49_20obj_128_25b_32h':
     assert NUM_OBJECT == 20
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 64
@@ -145,6 +220,7 @@ if OUTPUT_NAME == 'maxlen49_20obj_128_14b_16h' or \
         OUTPUT_NAME == 'maxlen49_20obj_128_14b_16h_mask_slower':
     assert NUM_OBJECT == 20
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -167,6 +243,7 @@ if OUTPUT_NAME == 'maxlen49_20obj_128_14b_16h' or \
 if OUTPUT_NAME == 'maxlen49_64':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 64
@@ -188,6 +265,7 @@ if OUTPUT_NAME == 'maxlen49_64':
 if OUTPUT_NAME == 'maxlen49_128':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 64
@@ -209,6 +287,7 @@ if OUTPUT_NAME == 'maxlen49_128':
 if OUTPUT_NAME == 'maxlen49_128_14b':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -230,6 +309,7 @@ if OUTPUT_NAME == 'maxlen49_128_14b':
 if OUTPUT_NAME == 'maxlen49_256_13b':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -251,6 +331,7 @@ if OUTPUT_NAME == 'maxlen49_256_13b':
 if OUTPUT_NAME == 'maxlen49_128_14b_8h':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -272,6 +353,7 @@ if OUTPUT_NAME == 'maxlen49_128_14b_8h':
 if OUTPUT_NAME == 'maxlen49_128_14b_16h':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
 
     # encoder
     ENCODE_INPUT_SIZE = 128

@@ -88,13 +88,13 @@ if __name__ == '__main__':
         image_path = list(annotations['file_name'].unique())
         n_examples = len(image_path)
 
-        batch_size = 100
+        batch_size = 20
         image_dataset = ImagePreprocessDataset(path_list=image_path,
                                                model=IMAGE_MODEL)
         image_dataloader = DataLoader(image_dataset,
                                       batch_size=batch_size,
                                       shuffle=False,
-                                      num_workers=1)
+                                      num_workers=4)
 
         # i = 0
         # sp = 10000

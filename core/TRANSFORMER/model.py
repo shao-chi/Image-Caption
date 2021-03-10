@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from core.TRANSFORMER.modules import EncoderBlock, DecoderBlock
+from core.TRANSFORMER.modules import EncoderBlock, DecoderBlock, FeedForward
 from core.config import PAD_IDX
 
 class Transformer(nn.Module):
@@ -26,7 +26,9 @@ class Transformer(nn.Module):
                        decode_v_dim=512,
                        decode_hidden_size=2048,
                        decode_num_blocks=6,
-                       decode_num_heads=8):
+                       decode_num_heads=8,
+                       
+                       move_first_image_feature=False):
         super(Transformer, self).__init__()
 
         self.max_length = max_length
@@ -51,7 +53,8 @@ class Transformer(nn.Module):
                                v_dim=decode_v_dim,
                                input_size=decode_input_size,
                                hidden_size=decode_hidden_size,
-                               dropout=dropout)
+                               dropout=dropout,
+                               move_first_image_feature=move_first_image_feature)
         self.classifer = nn.Linear(decode_input_size, num_vocab)
         nn.init.xavier_normal_(self.classifer.weight)
 
@@ -204,8 +207,8 @@ class Encoder(nn.Module):
                        dropout):
         super(Encoder, self).__init__()
 
-        self.position_embedding = nn.Linear(dim_positions, input_size)
-        self.feature_embedding = nn.Linear(dim_features, input_size)
+        self.position_embedding = nn.Linear(dim_positions, input_size, bias=False)
+        self.feature_embedding = nn.Linear(dim_features, input_size, bias=False)
         self.norm = nn.LayerNorm(input_size, eps=1e-6)
         self.encoder = nn.ModuleList([
                 EncoderBlock(input_size=input_size,
@@ -254,7 +257,8 @@ class Decoder(nn.Module):
                        v_dim,
                        input_size,
                        hidden_size,
-                       dropout):
+                       dropout,
+                       move_first_image_feature):
         super(Decoder, self).__init__()
 
         def init_weights(m):
@@ -265,6 +269,7 @@ class Decoder(nn.Module):
         max_length = max_length - 1
         self.max_length = max_length
         self.input_size = input_size
+        self.move_first_image_feature = move_first_image_feature
 
         self.word_embedding = nn.Embedding(num_embeddings=num_vocab,
                                            embedding_dim=dim_word_embedding,
@@ -277,6 +282,16 @@ class Decoder(nn.Module):
         self.norm = nn.LayerNorm(normalized_shape=input_size,
                                  eps=1e-6)
 
+        if self.move_first_image_feature:
+            self.position_wise_1 = nn.Linear(input_size, hidden_size)
+            self.position_wise_2 = nn.Linear(hidden_size, input_size)
+            nn.init.xavier_normal_(self.position_wise_1.weight)
+            nn.init.xavier_normal_(self.position_wise_2.weight)
+
+            self.layer_norm = nn.LayerNorm(input_size, eps=1e-6)
+            self.dropout = nn.Dropout(dropout)
+            self.relu = nn.ReLU()
+
         self.decoder = nn.ModuleList([
                 DecoderBlock(input_size=input_size,
                              hidden_size=hidden_size,
@@ -286,8 +301,10 @@ class Decoder(nn.Module):
                              dropout=dropout)
                     for _ in range(num_blocks)])
 
-    def forward(self, caption_vector, encode_output, context_attention_mask=None):
-        # non_pad_mask = get_non_pad_mask(sequence=caption_vector)
+    def forward(self, caption_vector, encode_output,
+                      context_attention_mask=None,
+                      whole_image=None):
+        non_pad_mask = self.get_non_pad_mask(sequence=caption_vector)
 
         self_attention_mask_subsequent = \
                 self.get_subsequent_mask(sequence=caption_vector)
@@ -310,12 +327,20 @@ class Decoder(nn.Module):
             decode_output, decode_attention, context_attention = \
                 block(decode_input=decode_output,
                       encode_output=encode_output,
-                    #   non_pad_mask=None,
+                      non_pad_mask=non_pad_mask,
                       self_attention_mask=self_attention_mask,
                       context_attention_mask=context_attention_mask)
 
-            decode_attention_list += [decode_attention]
-            context_attention_list += [context_attention]
+        decode_attention_list += [decode_attention]
+        context_attention_list += [context_attention]
+
+        if self.move_first_image_feature:
+            first_encode = encode_output[:, 0].unsqueeze(1)
+            decode = self.position_wise_1(decode_output + first_encode)
+            decode = self.relu(decode)
+            decode = self.position_wise_2(decode)
+            decode = self.dropout(decode)
+            decode_output = self.layer_norm(decode + decode_output)
 
         return decode_output, decode_attention, context_attention
 
@@ -340,6 +365,11 @@ class Decoder(nn.Module):
                             .expand(batch_size, sequence_length, sequence_length)  # b x ls x ls
 
         return subsequent_mask
+
+    def get_non_pad_mask(self, sequence):
+        assert sequence.dim() == 2
+
+        return sequence.ne(PAD_IDX).type(torch.float).unsqueeze(-1)
 
 
 class PositionalEncoding(nn.Module):
@@ -371,12 +401,6 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         return x + self.pos_table[:, :x.size(1)].clone().detach()
-
-
-# def get_non_pad_mask(sequence):
-#     assert sequence.dim() == 2
-
-#     return sequence.ne(PAD_IDX).type(torch.float).unsqueeze(-1)
 
 
 # def get_pos_onehot(length):

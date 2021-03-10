@@ -2,21 +2,13 @@ import pickle
 
 import cv2
 import torch
+import torch.nn as nn
 
 from core.TRANSFORMER.model import Transformer
 from core.config import *
 from core.utils import decode_captions
 from core.preprocess import image_feature_YOLOv5, image_feature_FasterRCNN, \
                             ResnetExtractor, FasterRCNNExtractor
-
-
-if torch.cuda.is_available():
-    device_name = "cuda:1"
-else:
-    device_name = "cpu"
-
-DEVICE = torch.device(device_name)
-print(f'Using {device_name}\n')
 
 
 class MODEL_init:
@@ -79,7 +71,8 @@ class TRANSFORMER(MODEL_init):
                                  decode_num_blocks=DECODE_NUM_BLOCKS,
                                  decode_num_heads=DECODE_NUM_HEADS,
                                  dropout=DROPOUT,
-                                 device=DEVICE).to(DEVICE)
+                                 device=DEVICE,
+                                 move_first_image_feature=MOVE_FIRST_IMAGE_FAETURE).to(DEVICE)
         self.optimizer = torch.optim.Adam((p for p in self.model.parameters() \
                                                 if p.requires_grad),
                                           lr=LEARNING_RATE)
