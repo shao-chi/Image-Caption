@@ -1,21 +1,25 @@
 import os
+import time
 
 import cv2
 import fire
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import numpy as np
 
-from core.models import TRANSFORMER, DEVICE
+from core.models import DEVICE, TRANSFORMER, SelfCriticNetwork
 from core.config import *
 from core.dataset import TrainDataset, TestDataset
 from core.utils import save_pickle, write_scores
 from core.evaluations import evaluate
 
-
-MODEL = TRANSFORMER()
+if CAPTION_MODEL == 'Transformer':
+    MODEL = TRANSFORMER()
+elif CAPTION_MODEL == 'RL_Transformer':
+    MODEL = SelfCriticNetwork()
 
 
 def train():
@@ -57,21 +61,38 @@ def train():
                 batch_positions,
                 batch_captions,
                 batch_image_idxs) in enumerate(tqdm(train_dataloader)):
-
             MODEL.train_step(batch_features=batch_features,
                              batch_positions=batch_positions,
                              batch_captions=batch_captions)
             
             if i % 20 == 0:
-                t_loss = MODEL.compute_loss(object_features=eval_t_features,
-                                            position_features=eval_t_positions,
-                                            target_caption=eval_t_captions)
-                v_loss = MODEL.compute_loss(object_features=eval_v_features,
-                                            position_features=eval_v_positions,
-                                            target_caption=eval_v_captions)
-                writer.add_scalars('LOSS/BATCH',
-                                   {'Train': t_loss, 'Valid': v_loss},
-                                   i+n_iter*(epoch-1))
+                if CAPTION_MODEL == 'Transformer':
+                    t_loss = MODEL.compute_loss(object_features=eval_t_features,
+                                                position_features=eval_t_positions,
+                                                target_caption=eval_t_captions)
+                    v_loss = MODEL.compute_loss(object_features=eval_v_features,
+                                                position_features=eval_v_positions,
+                                                target_caption=eval_v_captions)
+                    writer.add_scalars('LOSS/BATCH',
+                                       {'Train': t_loss, 'Valid': v_loss},
+                                       i+n_iter*(epoch-1))
+
+                elif CAPTION_MODEL == 'RL_Transformer':
+                    t_r_loss, t_reward, t_c_loss = MODEL.compute_loss(object_features=eval_t_features,
+                                                                      position_features=eval_t_positions,
+                                                                      target_caption=eval_t_captions)
+                    v_r_loss, v_reward, v_c_loss =  MODEL.compute_loss(object_features=eval_v_features,
+                                                                       position_features=eval_v_positions,
+                                                                       target_caption=eval_v_captions)
+                    writer.add_scalars('REWARD/BATCH',
+                                        {'Train': t_reward, 'Valid': v_reward},
+                                        i+n_iter*(epoch-1))
+                    writer.add_scalars('LOSS/BATCH_REWARD',
+                                       {'Train': t_r_loss, 'Valid': v_r_loss},
+                                       i+n_iter*(epoch-1))
+                    writer.add_scalars('LOSS/BATCH_CAPTION',
+                                       {'Train': t_c_loss, 'Valid': v_c_loss},
+                                       i+n_iter*(epoch-1))
             
             if (i+1) % 2500 == 0:
                 sample_caption, _ = MODEL.generate_caption(
@@ -97,57 +118,117 @@ def train():
                                 i+n_iter*(epoch-1))
 
         # evaluation
-        train_loss = 0
+        if CAPTION_MODEL == 'Transformer':
+            train_loss = 0
+        elif CAPTION_MODEL == 'RL_Transformer':
+            train_r_loss = 0
+            train_c_loss = 0
+            train_reward = 0
+
         for i, (batch_features,
                 batch_positions,
                 batch_captions, _) in enumerate(train_dataloader):
 
             if i < len(valid_dataloader):
-                train_loss += MODEL.compute_loss(
-                                object_features=batch_features,
-                                position_features=batch_positions,
-                                target_caption=batch_captions)
+                if CAPTION_MODEL == 'Transformer':
+                    train_loss += MODEL.compute_loss(object_features=batch_features,
+                                                     position_features=batch_positions,
+                                                     target_caption=batch_captions)
+                
+                elif CAPTION_MODEL == 'RL_Transformer':
+                    r_loss, reward, c_loss = MODEL.compute_loss(object_features=batch_features,
+                                                                position_features=batch_positions,
+                                                                target_caption=batch_captions)
+                    train_r_loss += r_loss
+                    train_reward += reward
+                    train_c_loss += c_loss
+                
             else:
                 break
 
-        valid_loss = 0
-        valid_caption = [''] * valid_dataset.len_image
+        if CAPTION_MODEL == 'Transformer':
+            valid_loss = 0
+        elif CAPTION_MODEL == 'RL_Transformer':
+            valid_r_loss = 0
+            valid_c_loss = 0
+            valid_reward = 0
 
+        valid_caption = [''] * valid_dataset.len_image
         for batch_features, \
             batch_positions, \
             batch_captions, \
             batch_image_idxs in valid_dataloader:
+            if CAPTION_MODEL == 'Transformer':
+                valid_loss += MODEL.compute_loss(object_features=batch_features,
+                                                 position_features=batch_positions,
+                                                 target_caption=batch_captions)
+                
+            elif CAPTION_MODEL == 'RL_Transformer':
+                r_loss, reward, c_loss = MODEL.compute_loss(object_features=batch_features,
+                                                            position_features=batch_positions,
+                                                            target_caption=batch_captions)
+                valid_r_loss += r_loss
+                valid_reward += reward
+                valid_c_loss += c_loss
 
-            valid_loss += MODEL.compute_loss(object_features=batch_features,
-                                             position_features=batch_positions,
-                                             target_caption=batch_captions)
             captions, _ = MODEL.generate_caption(object_features=batch_features,
                                                  position_features=batch_positions)
 
-            for i, idx in enumerate(batch_image_idxs):
-                valid_caption[idx] = captions[i]
+            for i, (idx, caption) in enumerate(zip(batch_image_idxs, captions)):
+                valid_caption[idx] = caption
 
         save_pickle(valid_caption,
                     str(os.path.join(target_dir, "valid.candidate.captions.pkl")))
-
-        train_loss = train_loss / len(valid_dataloader)
-        valid_loss = valid_loss / len(valid_dataloader)
-        print(f"\nTraining LOSS: {train_loss}")
-        print(f"Validation LOSS: {valid_loss}\n")
-
         scores = evaluate(target_dir=target_dir,
                           data_path=DATA_PATH,
                           split='valid',
                           get_scores=True)
 
-        scores['train_loss'] = train_loss
-        scores['valid_loss'] = valid_loss
+        if CAPTION_MODEL == 'Transformer':
+            train_loss = train_loss / len(valid_dataloader)
+            valid_loss = valid_loss / len(valid_dataloader)
+            print(f"\nTraining LOSS: {train_loss}")
+            print(f"Validation LOSS: {valid_loss}")
+
+            scores['train_loss'] = train_loss
+            scores['valid_loss'] = valid_loss
+            writer.add_scalars('LOSS/EPOCH', {'Train': scores['train_loss'],
+                                              'Valid': scores['valid_loss']}, epoch)
+
+        elif CAPTION_MODEL == 'RL_Transformer':
+            train_r_loss = train_r_loss / len(valid_dataloader)
+            valid_r_loss = valid_r_loss / len(valid_dataloader)
+            print(f"\nTraining LOSS (REWARD): {train_r_loss}")
+            print(f"Validation LOSS (REWARD): {valid_r_loss}")
+            train_c_loss = train_c_loss / len(valid_dataloader)
+            valid_c_loss = valid_c_loss / len(valid_dataloader)
+            print(f"Training LOSS (CAPTION): {train_c_loss}")
+            print(f"Validation LOSS (CAPTION): {valid_c_loss}")
+            train_reward = train_reward / len(valid_dataloader)
+            valid_reward = valid_reward / len(valid_dataloader)
+            print(f"Training REWARD: {train_reward}")
+            print(f"Validation REWARD\n: {valid_reward}")
+
+            scores['train_reward_loss'] = train_r_loss
+            scores['valid_reward_loss'] = valid_r_loss
+            writer.add_scalars('LOSS/EPOCH_REWARD', {'Train': train_r_loss,
+                                                     'Valid': valid_r_loss}, epoch)
+            scores['train_caption_loss'] = train_c_loss
+            scores['valid_caption_loss'] = valid_c_loss
+            writer.add_scalars('LOSS/EPOCH', {'Train': train_c_loss,
+                                              'Valid': valid_c_loss}, epoch)
+            scores['train_reward'] = train_reward
+            scores['valid_reward'] = valid_reward
+            writer.add_scalars('REWARD/EPOCH', {'Train': train_reward,
+                                                'Valid': valid_reward}, epoch)
+
         write_scores(scores=scores, path=OUTPUT_PATH, epoch=epoch, split='valid')
 
-        writer.add_scalars('LOSS/EPOCH', {'Train': scores['train_loss'],
-                                          'Valid': scores['valid_loss']}, epoch)
         for score_name, score in scores.items():
-            if score_name not in ['train_loss', 'valid_loss']:
+            if score_name not in ['train_loss', 'valid_loss',
+                                  'train_reward', 'valid_reward',
+                                  'train_reward_loss', 'valid_reward_loss',
+                                  'train_caption_loss', 'valid_caption_loss']:
                 writer.add_scalar(f'EVALUATION/{score_name}', score, epoch)
 
         MODEL.save(path=os.path.join(model_dir, f'model_{epoch}.pt'))
@@ -192,8 +273,10 @@ def evaluation(split='test', epoch=90, beam_size=None):
     write_scores(scores=scores, path=OUTPUT_PATH, epoch=epoch, split=split)
 
 
-def demo(image_path, beam_size=None, epoch=90):
-    features, positions, xyxy = MODEL.preprocess(image_path=image_path)
+def demo(image_path, beam_size=None, epoch=90, save_img=False):
+    start = time.time()
+    features, positions, xyxy = MODEL.preprocess(image_path=image_path,
+                                                 save_img=save_img)
     
     feature = torch.FloatTensor(features).unsqueeze(0).to(DEVICE)
     position = torch.FloatTensor(positions).unsqueeze(0).to(DEVICE)
@@ -208,7 +291,7 @@ def demo(image_path, beam_size=None, epoch=90):
     caption = caption[0]
     caption_length = len(caption.split(' '))
 
-    if isinstance(attention_list, list):
+    if save_img and isinstance(attention_list, list) :
         attention_list = np.array(attention_list) \
                                 .reshape(MAX_LENGTH+1, NUM_OBJECT+1)
 
@@ -217,23 +300,40 @@ def demo(image_path, beam_size=None, epoch=90):
         for i, attention in enumerate(attention_list):
             img = cv2.imread(image_path)
 
+            mask_list = []
             for obj_attend, obj_xyxy in zip(attention[1:], xyxy):
+                if obj_attend == 0:
+                    continue
+
                 c1 = (int(obj_xyxy[0]), int(obj_xyxy[1]))
                 c2 = (int(obj_xyxy[2]), int(obj_xyxy[3]))
 
-                zeros = np.zeros((img.shape), dtype=np.uint8)
-                zeros_mask = cv2.rectangle(zeros, c1, c2,
-                                        color=(255, 255, 255),
-                                        thickness=-1)
-                img = cv2.addWeighted(img, 1, zeros_mask, obj_attend, gamma=0)
+                mask = img[int(obj_xyxy[1]):int(obj_xyxy[3]),
+                           int(obj_xyxy[0]):int(obj_xyxy[2])]
+
+                # zeros = np.zeros((img.shape), dtype=np.uint8)
+                zeros_mask = cv2.rectangle(mask,
+                                           pt1=(0, 0),
+                                           pt2=(mask.shape[1]-1, mask.shape[0]-1),
+                                           color=(255, 255, 255),
+                                           thickness=-1)
+                mask = cv2.addWeighted(mask, obj_attend, zeros_mask, 1-obj_attend, gamma=0)
+                cv2.imwrite(f'./demo/{image_dir}/{IMAGE_MODEL}/{len(mask_list)+1}_mask.jpg', mask)
+                mask_list.append((mask, obj_attend, obj_xyxy))
+
+            mask_list = sorted(mask_list, key=lambda k: k[1])
+            for mask, _, obj_xyxy in mask_list:
+                img[int(obj_xyxy[1]):int(obj_xyxy[3]),
+                    int(obj_xyxy[0]):int(obj_xyxy[2])] = mask
 
             cv2.imwrite(f'./demo/{image_dir}/{IMAGE_MODEL}/{i+1}_{image_name}', img)
 
             if i == (caption_length - 1):
                 break
-    
+
     print("Generated Caption:", caption)
-    
+    print("Spending Time:", time.time() - start)
+
 
 if __name__ == '__main__':
     fire.Fire()

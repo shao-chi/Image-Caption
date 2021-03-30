@@ -77,6 +77,8 @@
     * CIDEr : https://arxiv.org/pdf/1411.5726.pdf
     * SPICE : https://arxiv.org/pdf/1607.08822.pdf
 * Show, Attend, and Tell : https://github.com/yunjey/show-attend-and-tell
+* Self Critical : https://github.com/krasserm/fairseq-image-captioning
+* Deep RL based Image Captioning with Embedding Reward : https://github.com/Pranshu258/Deep_Image_Captioning
 * Tokenizer : https://stanfordnlp.github.io/CoreNLP/
 * YOLOv5 : https://github.com/ultralytics/yolov5
 * ResNet101 : https://arxiv.org/pdf/1512.03385.pdf

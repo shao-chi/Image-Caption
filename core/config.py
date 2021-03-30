@@ -3,17 +3,22 @@ from torch.multiprocessing import set_start_method
 
 # preprocess
 MAX_LENGTH = 49
-WORD_COUNT_THRESHOLD = 5
+WORD_COUNT_THRESHOLD = 1
 NUM_OBJECT = 36
 PAD_IDX = 0
 
-# IMAGE_MODEL = 'YOLOv5'
-IMAGE_MODEL = 'FasterRCNN'
+IMAGE_MODEL = 'YOLOv5'
+# IMAGE_MODEL = 'FasterRCNN'
+CAPTION_MODEL = 'Transformer'
+# CAPTION_MODEL = 'RL_Transformer'
 
-MOVE_FIRST_IMAGE_FAETURE = False
+MOVE_FIRST_IMAGE_FAETURE = True
+SPLIT_POSITION = True
 
-MODEL_NAME = 'maxlen49_36obj_1wordCount_frcnn'
-OUTPUT_NAME = 'maxlen49_36obj_1wordCount_frcnn_256_25b_32h'
+MODEL_NAME = 'maxlen49_36obj_1wordCount'
+OUTPUT_NAME = 'maxlen49_36obj_1wordCount_128_24b_8h_SplitPosition'
+print('OUTPUT_NAME: ', OUTPUT_NAME)
+
 DATA_PATH = f'./data/{MODEL_NAME}'
 OUTPUT_PATH = f'./output/{OUTPUT_NAME}'
 WORD_TO_IDX_PATH = f'{DATA_PATH}/train/word_index.pkl'
@@ -22,11 +27,11 @@ print('Data :', MODEL_NAME)
 print('Model : ', OUTPUT_NAME)
 
 if torch.cuda.is_available():
-    set_start_method('spawn', force=True)
+    # set_start_method('spawn', force=True)
 
     device_name = "cuda:0"
     resnet_device = "cuda:1"
-    frcnn_device = "cuda:2"
+    frcnn_device = "cuda:1"
 
 else:
     device_name = "cpu"
@@ -50,14 +55,143 @@ elif IMAGE_MODEL == 'FasterRCNN':
 # solver
 NUM_EPOCH = 1000
 BATCH_SIZE = 64
-DROPOUT = 0.4
+DROPOUT = 0.5
 LEARNING_RATE = 0.00005
 LOG_PATH = f'./logs_{OUTPUT_NAME}/'
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_128_24b_8h_SplitPosition':
+    assert SPLIT_POSITION
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+
+    # encoder
+    ENCODE_INPUT_SIZE = 64
+    ENCODE_Q_K_DIM = 128
+    ENCODE_V_DIM = 128
+    ENCODE_HIDDEN_SIZE = 128
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 8
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 64
+    DECODE_Q_K_DIM = 128
+    DECODE_V_DIM = 128
+    DECODE_HIDDEN_SIZE = 128
+    DECODE_NUM_BLOCKS = 4
+    DECODE_NUM_HEADS = 8
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_RL':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'RL_Transformer'
+    
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_FocalLoss_SplitPosition' or \
+        OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_SplitPosition':
+    assert SPLIT_POSITION
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_EncoderMask' or\
+        OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_FocalLoss':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
+    
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_move_3':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
+    
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 512
+    ENCODE_V_DIM = 512
+    ENCODE_HIDDEN_SIZE = 1024
+    ENCODE_NUM_BLOCKS = 3
+    ENCODE_NUM_HEADS = 16
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 512
+    DECODE_V_DIM = 512
+    DECODE_HIDDEN_SIZE = 1024
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 16
+
 
 if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_move':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
     
     # encoder
     ENCODE_INPUT_SIZE = 256
@@ -81,6 +215,8 @@ if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_1024_25b_32h_mask':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 1024
@@ -104,6 +240,8 @@ if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_frcnn_256_25b_32h':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'FasterRCNN'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 256
@@ -126,6 +264,8 @@ if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_66b_32h':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 256
@@ -150,6 +290,8 @@ if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_mask' \
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 256
@@ -173,6 +315,8 @@ if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_128_14b_16h_mask':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -196,6 +340,8 @@ if OUTPUT_NAME == 'maxlen49_20obj_128_25b_32h':
     assert NUM_OBJECT == 20
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 64
@@ -221,6 +367,8 @@ if OUTPUT_NAME == 'maxlen49_20obj_128_14b_16h' or \
     assert NUM_OBJECT == 20
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -244,6 +392,8 @@ if OUTPUT_NAME == 'maxlen49_64':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 64
@@ -266,6 +416,8 @@ if OUTPUT_NAME == 'maxlen49_128':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 64
@@ -288,6 +440,8 @@ if OUTPUT_NAME == 'maxlen49_128_14b':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -310,6 +464,8 @@ if OUTPUT_NAME == 'maxlen49_256_13b':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -332,6 +488,8 @@ if OUTPUT_NAME == 'maxlen49_128_14b_8h':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 128
@@ -354,6 +512,8 @@ if OUTPUT_NAME == 'maxlen49_128_14b_16h':
     assert NUM_OBJECT == 36
     assert IMAGE_MODEL == 'YOLOv5'
     assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
 
     # encoder
     ENCODE_INPUT_SIZE = 128

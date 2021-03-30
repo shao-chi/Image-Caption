@@ -3,7 +3,8 @@ import torch.nn as nn
 import numpy as np
 
 from core.TRANSFORMER.modules import EncoderBlock, DecoderBlock, FeedForward
-from core.config import PAD_IDX
+from core.TRANSFORMER.loss import FocalLoss
+from core.config import PAD_IDX, OUTPUT_NAME
 
 class Transformer(nn.Module):
 
@@ -28,7 +29,8 @@ class Transformer(nn.Module):
                        decode_num_blocks=6,
                        decode_num_heads=8,
                        
-                       move_first_image_feature=False):
+                       move_first_image_feature=False,
+                       split_position=False):
         super(Transformer, self).__init__()
 
         self.max_length = max_length
@@ -43,7 +45,8 @@ class Transformer(nn.Module):
                                v_dim=encode_v_dim,
                                input_size=encode_input_size,
                                hidden_size=encode_hidden_size,
-                               dropout=dropout)
+                               dropout=dropout,
+                               split_position=split_position)
         self.decoder = Decoder(num_vocab=num_vocab,
                                max_length=max_length,
                                dim_word_embedding=dim_word_embedding,
@@ -59,7 +62,11 @@ class Transformer(nn.Module):
         nn.init.xavier_normal_(self.classifer.weight)
 
         self.softmax = nn.Softmax(dim=1)
-        self.loss = nn.CrossEntropyLoss(ignore_index=PAD_IDX, reduction='mean')
+        
+        if OUTPUT_NAME.find('FocalLoss') != -1:
+            self.loss = FocalLoss(ignore_index=PAD_IDX)
+        else:
+            self.loss = nn.CrossEntropyLoss(ignore_index=PAD_IDX, reduction='mean')
 
 
     def forward(self, object_features,
@@ -204,10 +211,17 @@ class Encoder(nn.Module):
                        v_dim,
                        input_size,
                        hidden_size,
-                       dropout):
+                       dropout,
+                       split_position):
         super(Encoder, self).__init__()
 
-        self.position_embedding = nn.Linear(dim_positions, input_size, bias=False)
+        self.split_position = split_position
+        if split_position:
+            self.object_embedding = nn.Linear(dim_positions-4, input_size, bias=False)
+            self.position_embedding = nn.Linear(4, input_size, bias=False)
+        else:
+            self.position_embedding = nn.Linear(dim_positions, input_size, bias=False)
+
         self.feature_embedding = nn.Linear(dim_features, input_size, bias=False)
         self.norm = nn.LayerNorm(input_size, eps=1e-6)
         self.encoder = nn.ModuleList([
@@ -220,18 +234,37 @@ class Encoder(nn.Module):
                     for _ in range(num_blocks)])
 
     def forward(self, object_features, position_features):
-        attention_mask = self.get_attention_key_pad_mask(k=position_features,
-                                                         q=position_features)
-
-        embedded_position = self.position_embedding(position_features)
+        non_pad_mask = self.get_non_pad_mask(position_features)
+        self_attention_mask_subsequent = \
+                            self.get_subsequent_mask(sequence=position_features)
+        self_attention_mask_key_pad = \
+                            self.get_attention_key_pad_mask(k=position_features,
+                                                            q=position_features)
+        self_attention_mask = \
+                (self_attention_mask_key_pad + self_attention_mask_subsequent) \
+                .gt(0)
 
         embedded_feature = self.feature_embedding(object_features)
-        output = embedded_feature + embedded_position
+
+        if self.split_position:
+            positions = position_features[:, :, :4].clone()
+            objects = position_features[:, :, 4:].clone()
+
+            embedded_position = self.position_embedding(positions)
+            embedded_objects = self.object_embedding(objects)
+            output = embedded_feature + embedded_position + embedded_objects
+
+        else:
+            embedded_position = self.position_embedding(position_features)
+            output = embedded_feature + embedded_position
+
         output = self.norm(output)
         
         attention_list = []
         for block in self.encoder:
-            output, attention = block(encode_input=output)
+            output, attention = block(encode_input=output,
+                                      non_pad_mask=non_pad_mask,
+                                      attention_mask=self_attention_mask)
             attention_list += [attention]
 
         return output, attention_list
@@ -243,7 +276,25 @@ class Encoder(nn.Module):
         mask = torch.count_nonzero(k, dim=2).eq(0)
         mask = mask.unsqueeze(1).expand(batch_size, q.size(1), k.size(1))  # b x lq x lk
 
-        return None
+        return mask
+
+    def get_subsequent_mask(self, sequence):
+        batch_size, sequence_length, _ = sequence.size()
+
+        subsequent_mask = torch.triu(torch.ones((sequence_length, sequence_length),
+                                                device=sequence.device,
+                                                dtype=torch.uint8),
+                                    diagonal=1)
+        subsequent_mask = subsequent_mask \
+                            .unsqueeze(0) \
+                            .expand(batch_size, sequence_length, sequence_length)  # b x ls x ls
+
+        return subsequent_mask
+
+    def get_non_pad_mask(self, features):
+        mask = torch.count_nonzero(features, dim=2).ne(0)
+
+        return mask.type(torch.float).unsqueeze(-1)
 
 
 class Decoder(nn.Module):

@@ -148,10 +148,9 @@ class EncoderBlock(nn.Module):
                                                      k=encode_input,
                                                      v=encode_input,
                                                      mask=attention_mask)
-        if non_pad_mask is not None:
-            output *= non_pad_mask
 
         output = self.feed_forward(output)
+        
         if non_pad_mask is not None:
             output *= non_pad_mask
 
