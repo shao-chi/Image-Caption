@@ -88,7 +88,7 @@ if __name__ == '__main__':
         image_path = list(annotations['file_name'].unique())
         n_examples = len(image_path)
 
-        batch_size = 20
+        batch_size = 5
         image_dataset = ImagePreprocessDataset(path_list=image_path,
                                                model=IMAGE_MODEL)
         image_dataloader = DataLoader(image_dataset,

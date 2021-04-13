@@ -4,7 +4,7 @@ import numpy as np
 
 from core.TRANSFORMER.modules import EncoderBlock, DecoderBlock, FeedForward
 from core.TRANSFORMER.loss import FocalLoss
-from core.config import PAD_IDX, OUTPUT_NAME
+from core.config import PAD_IDX, OUTPUT_NAME, ENCODE_MASK
 
 class Transformer(nn.Module):
 
@@ -262,9 +262,13 @@ class Encoder(nn.Module):
         
         attention_list = []
         for block in self.encoder:
-            output, attention = block(encode_input=output,
-                                      non_pad_mask=non_pad_mask,
-                                      attention_mask=self_attention_mask)
+            if ENCODE_MASK:
+                output, attention = block(encode_input=output,
+                                          non_pad_mask=non_pad_mask,
+                                          attention_mask=self_attention_mask)
+            else:
+                output, attention = block(encode_input=output)
+                
             attention_list += [attention]
 
         return output, attention_list
@@ -353,8 +357,7 @@ class Decoder(nn.Module):
                     for _ in range(num_blocks)])
 
     def forward(self, caption_vector, encode_output,
-                      context_attention_mask=None,
-                      whole_image=None):
+                      context_attention_mask=None):
         non_pad_mask = self.get_non_pad_mask(sequence=caption_vector)
 
         self_attention_mask_subsequent = \

@@ -9,6 +9,7 @@ from core.config import PAD_IDX, WORD_TO_IDX_PATH
 
 
 class PolicyNetwork(nn.Module):
+
     def __init__(self, num_vocab, max_length,
                        encode_dim_positions,
                        encode_dim_features,
@@ -31,8 +32,7 @@ class PolicyNetwork(nn.Module):
                        decode_num_heads=8,
                        
                        move_first_image_feature=False,
-                       
-                       penalty=1.0):
+                       split_position=False):
         super(PolicyNetwork, self).__init__()
 
         self.max_length = max_length
@@ -47,7 +47,8 @@ class PolicyNetwork(nn.Module):
                                v_dim=encode_v_dim,
                                input_size=encode_input_size,
                                hidden_size=encode_hidden_size,
-                               dropout=dropout)
+                               dropout=dropout,
+                               split_position=split_position)
         self.decoder = Decoder(num_vocab=num_vocab,
                                max_length=max_length,
                                dim_word_embedding=dim_word_embedding,
@@ -64,57 +65,10 @@ class PolicyNetwork(nn.Module):
 
         self.softmax = nn.LogSoftmax(dim=1)
 
+
     def forward(self, object_features,
                       position_features,
-                      target_caption,
-                      greedy=True):
-        # target_caption = target_caption.clone().long()
-
-        # encode_output, _ = self.encoder(object_features=object_features,
-        #                                     position_features=position_features)
-
-        # batch_size = encode_output.size(0)
-        # input_caption = torch.zeros(batch_size, self.max_length+1) \
-        #                      .long() \
-        #                      .to(self.device)
-
-        # input_caption[:, 0] = 1
-        # sample_log_probs = torch.zeros(batch_size, self.max_length, self.num_vocab) \
-        #                         .to(self.device)
-        # attention_list = []
-        # for t in range(self.max_length-1):
-        #     decode_input = target_caption[:, :t+1].clone()
-        #     context_attention_mask = self.get_attention_key_pad_mask(k=position_features,
-        #                                                                  q=decode_input)
-
-        #     decode_output, _, attention = self.decoder(
-        #                                        caption_vector=decode_input,
-        #                                        encode_output=encode_output,
-        #                                        context_attention_mask=context_attention_mask)
-        #     attention_list.append(np.mean(attention.detach().cpu().numpy()[:, :, t], axis=1))
-
-        #     output = decode_output[:, t]
-        #     output = self.classifer(output)
-        #     log_probs = self.softmax(output)
-
-        #     if greedy:
-        #         output = torch.argmax(output, dim=1)
-
-        #     else:
-        #         output = torch.exp(log_probs)
-        #         output = torch.multinomial(output, 1)
-            
-        #     if len(output.size()) == 2:
-        #         input_caption[:, t+1] = output.squeeze(1).long()
-        #         sample_log_probs[:, t] = log_probs.gather(1, output)
-        #     else:
-        #         input_caption[:, t+1] = output.long()
-        #         sample_log_probs[:, t] = log_probs.gather(1, output.unsqueeze(1))
-
-        # return input_caption[:, 1:], \
-        #         sample_log_probs, \
-        #         attention_list
-
+                      target_caption):
         context_attention_mask = self.get_attention_key_pad_mask(k=position_features,
                                                                  q=target_caption[:, :-1])
 
@@ -122,52 +76,54 @@ class PolicyNetwork(nn.Module):
                                         position_features=position_features)
 
         input_caption = target_caption[:, :-1].clone().long()
-        target_caption = target_caption[:, 1:].clone().long().contiguous().view(-1)
         decode_output, _, _ = self.decoder(caption_vector=input_caption,
                                            encode_output=encode_output,
                                            context_attention_mask=context_attention_mask)
         output = self.classifer(decode_output)
-        log_probs = F.log_softmax(output, dim=2)
 
-        batch_size = encode_output.size(0)
-        sample_log_probs = torch.zeros(batch_size, self.max_length, self.num_vocab) \
-                                .to(self.device)
-        output_caption = torch.zeros(batch_size, self.max_length).to(self.device)
-
-        if greedy:
-            output = torch.argmax(output, dim=2)
-            output_caption = output.long()
-
-        else:
-            output = torch.exp(log_probs)
-
-        for t, (log, out) in enumerate(zip(log_probs.transpose(1, 0), output.transpose(1, 0))):
-            if not greedy:
-                out = torch.multinomial(out, 1)
-
-            if len(out.size()) == 2:
-                if not greedy:
-                    output_caption[:, t] = out.squeeze(1).long()
-                sample_log_probs[:, t] = log.gather(1, out)
-            else:
-                if not greedy:
-                    output_caption[:, t] = out.long()
-                sample_log_probs[:, t] = log.gather(1, out.unsqueeze(1))
-
-        return output_caption, sample_log_probs
+        return output
 
     
     def sample(self, object_features,
-                     position_features,
-                     target_caption,
-                     greedy=True):
-        with torch.no_grad():
-            output, log_probs = \
-                    self.forward(object_features=object_features,
-                                 position_features=position_features,
-                                 target_caption=target_caption,
-                                 greedy=greedy)
-            return output.cpu().numpy(), log_probs.cpu().numpy()
+                     position_features):
+        # output = self.forward(object_features=object_features,
+        #                       position_features=position_features,
+        #                       target_caption=target_caption)
+        # log_probs = F.log_softmax(output, dim=2)
+        # sequence = torch.argmax(log_probs, dim=2)
+
+        # return sequence, log_probs
+
+        encode_output, _ = self.encoder(object_features=object_features,
+                                            position_features=position_features)
+
+        batch_size = encode_output.size(0)
+        input_caption = torch.zeros(batch_size, self.max_length) \
+                                 .long() \
+                                 .to(self.device)
+        log_probs = torch.zeros(batch_size, self.max_length-1, self.num_vocab) \
+                                 .to(self.device)
+
+        input_caption[:, 0] = 1
+        for t in range(self.max_length-1):
+            decode_input = input_caption[:, :t+1].clone().long()
+            context_attention_mask = self.get_attention_key_pad_mask(k=position_features,
+                                                                     q=decode_input)
+
+            decode_output, _, _= self.decoder(caption_vector=decode_input,
+                                              encode_output=encode_output,
+                                              context_attention_mask=context_attention_mask)
+
+            output = decode_output[:, t]
+            output = self.classifer(output)
+
+            log_prob = self.softmax(output)
+            log_probs[:, t] = log_prob
+
+            seq = torch.argmax(log_prob, dim=1)
+            input_caption[:, t+1] = seq
+
+        return input_caption[:, 1:], log_probs
 
 
     def generate_caption_vector(self, object_features,
@@ -284,13 +240,3 @@ class PolicyNetwork(nn.Module):
         assert sequence.dim() == 2
 
         return sequence.ne(PAD_IDX).type(torch.float).unsqueeze(-1)
-
-
-def get_attention_key_pad_mask(k, q):
-    assert k.size(0) == q.size(0)
-
-    batch_size = k.size(0)
-    mask = torch.count_nonzero(k, dim=2).eq(0)
-    mask = mask.unsqueeze(1).expand(batch_size, q.size(1), k.size(1))  # b x lq x lk
-
-    return mask

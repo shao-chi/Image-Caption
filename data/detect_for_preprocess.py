@@ -131,10 +131,10 @@ def get_boxes(weights, image_path, num_obj, transforms, image_size, save_img=Fal
                     else:
                         img_tensor = torch.cat([img_tensor, obj])
 
-                    xyxy_ = [xyxy[0]/im0s.shape[1], xyxy[1]/im0s.shape[0], \
-                             xyxy[2]/im0s.shape[1], xyxy[3]/im0s.shape[0]]
+                    xyxy_ = [xyxy[0].item()/im0s.shape[1], xyxy[1].item()/im0s.shape[0], \
+                             xyxy[2].item()/im0s.shape[1], xyxy[3].item()/im0s.shape[0]]
                     zeros = [0] * 80
-                    zeros[int(cls_)] = conf
+                    zeros[int(cls_)] = conf.item()
                     positions.append(xyxy_ + zeros)
 
                     i_obj += 1

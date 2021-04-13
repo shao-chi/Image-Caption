@@ -88,7 +88,7 @@ class FasterRCNNExtractor:
 # TODO: VGG19
 
 
-def image_feature_YOLOv5(image_path, num_obj=NUM_OBJECT, save_img=False):
+def image_feature_YOLOv5(image_path, num_obj=NUM_OBJECT, save_img=False, max_obj=False):
     assert IMAGE_MODEL == 'YOLOv5'
 
     weights = './data/yolov5/yolov5x.pt'
@@ -97,10 +97,17 @@ def image_feature_YOLOv5(image_path, num_obj=NUM_OBJECT, save_img=False):
     transforms = model.transforms
     img_tensor, positions, xyxy = get_boxes(weights,
                                             image_path=image_path,
-                                            num_obj=num_obj*2,
+                                            num_obj=num_obj,
                                             transforms=transforms,
                                             image_size=image_size,
                                             save_img=save_img)
+
+    if max_obj:
+        zipper = list(zip(img_tensor.tolist(), positions, xyxy))
+        zipper = sorted(zipper, key=lambda z: (z[2][2]-z[2][0]) * (z[2][3]-z[2][1]), reverse=True)[:max_obj]
+        img_tensor, positions, xyxy = zip(*zipper)
+        positions, xyxy = [positions[0]], [xyxy[0]]
+        img_tensor = torch.FloatTensor(img_tensor)
 
     dataset = LoadImages(image_path, img_size=640)
     for _, _, im0s, _ in dataset:

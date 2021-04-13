@@ -6,17 +6,19 @@ MAX_LENGTH = 49
 WORD_COUNT_THRESHOLD = 1
 NUM_OBJECT = 36
 PAD_IDX = 0
+MAX_OBJ = 5
 
 IMAGE_MODEL = 'YOLOv5'
 # IMAGE_MODEL = 'FasterRCNN'
-CAPTION_MODEL = 'Transformer'
-# CAPTION_MODEL = 'RL_Transformer'
+# CAPTION_MODEL = 'Transformer'
+CAPTION_MODEL = 'RL_Transformer'
 
 MOVE_FIRST_IMAGE_FAETURE = True
-SPLIT_POSITION = True
+SPLIT_POSITION = False
+ENCODE_MASK = True
 
 MODEL_NAME = 'maxlen49_36obj_1wordCount'
-OUTPUT_NAME = 'maxlen49_36obj_1wordCount_128_24b_8h_SplitPosition'
+OUTPUT_NAME = 'RL_maxlen49_36obj_1wordCount_256_25b_32h_move'
 print('OUTPUT_NAME: ', OUTPUT_NAME)
 
 DATA_PATH = f'./data/{MODEL_NAME}'
@@ -24,7 +26,7 @@ OUTPUT_PATH = f'./output/{OUTPUT_NAME}'
 WORD_TO_IDX_PATH = f'{DATA_PATH}/train/word_index.pkl'
 
 print('Data :', MODEL_NAME)
-print('Model : ', OUTPUT_NAME)
+print('Model :', OUTPUT_NAME)
 
 if torch.cuda.is_available():
     # set_start_method('spawn', force=True)
@@ -41,7 +43,7 @@ else:
 RESNET_DEVICE = torch.device(resnet_device)
 FRCNN_DEVICE = torch.device(frcnn_device)
 DEVICE = torch.device(device_name)
-print(f'Using {resnet_device} for ResNet101 and {frcnn_device} for FasterRCNN\n')
+print(f'Using {resnet_device} for ResNet101 and {frcnn_device} for FasterRCNN')
 print(f'Using {device_name} for training model.')
 
 # encoder
@@ -54,10 +56,62 @@ elif IMAGE_MODEL == 'FasterRCNN':
 
 # solver
 NUM_EPOCH = 1000
-BATCH_SIZE = 64
-DROPOUT = 0.5
+BATCH_SIZE = 32
+DROPOUT = 0.3
 LEARNING_RATE = 0.00005
 LOG_PATH = f'./logs_{OUTPUT_NAME}/'
+
+
+if OUTPUT_NAME == 'RL_maxlen49_36obj_1wordCount_256_25b_32h_move':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'RL_Transformer'
+    assert not SPLIT_POSITION
+    assert ENCODE_MASK
+    
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_20conf_256_25b_32h_move':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
+    assert ENCODE_MASK
+    
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
 
 
 if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_128_24b_8h_SplitPosition':
@@ -192,6 +246,7 @@ if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_move':
     assert MOVE_FIRST_IMAGE_FAETURE
     assert CAPTION_MODEL == 'Transformer'
     assert not SPLIT_POSITION
+    assert not ENCODE_MASK
     
     # encoder
     ENCODE_INPUT_SIZE = 256

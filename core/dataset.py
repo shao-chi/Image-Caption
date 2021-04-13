@@ -3,6 +3,7 @@ from torch.utils.data import Dataset
 
 from core.utils import load_pickle, load_coco_data
 from core.preprocess import image_feature_YOLOv5, image_feature_FasterRCNN
+from core.config import MAX_OBJ
 
 class TrainDataset(Dataset):
     def __init__(self, data_path, split):
@@ -60,7 +61,7 @@ class ImagePreprocessDataset(Dataset):
         path = self.path_list[index]
 
         if self.model == 'YOLOv5':
-            features, positions, _ = image_feature_YOLOv5(image_path=path)
+            features, positions, _ = image_feature_YOLOv5(image_path=path, max_obj=MAX_OBJ)
         elif self.model == 'FasterRCNN':
             features, positions, _ = image_feature_FasterRCNN(image_path=path)
 
