@@ -184,9 +184,7 @@ class SelfCriticNetwork(MODEL_init):
         model_output = self.policy_net(object_features=batch_features.to(DEVICE),
                                        position_features=batch_positions.to(DEVICE),
                                        target_caption=batch_captions.to(DEVICE))
-        sample_sequence, sample_logprobs = self.policy_net.sample(
-                                                object_features=batch_features.to(DEVICE),
-                                                position_features=batch_positions.to(DEVICE))
+        sample_sequence, sample_logprobs = self.policy_net.sample(output=model_output)
         loss = self.loss(model_output=model_output.cpu(),
                          sample_sequence=sample_sequence.cpu(),
                          sample_logprobs=sample_logprobs.cpu(),
@@ -204,9 +202,7 @@ class SelfCriticNetwork(MODEL_init):
             model_output = self.policy_net(object_features=object_features.to(DEVICE),
                                            position_features=position_features.to(DEVICE),
                                            target_caption=target_caption.to(DEVICE))
-            sample_sequence, sample_logprobs = self.policy_net.sample(
-                                                    object_features=object_features.to(DEVICE),
-                                                    position_features=position_features.to(DEVICE))
+            sample_sequence, sample_logprobs = self.policy_net.sample(output=model_output)
             loss = self.loss(model_output=model_output.cpu(),
                             sample_sequence=sample_sequence.cpu(),
                             sample_logprobs=sample_logprobs.cpu(),
