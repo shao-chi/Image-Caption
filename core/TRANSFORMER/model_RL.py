@@ -85,44 +85,10 @@ class PolicyNetwork(nn.Module):
 
     
     def sample(self, output):
-        # output = self.forward(object_features=object_features,
-        #                       position_features=position_features,
-        #                       target_caption=target_caption)
         log_probs = F.log_softmax(output, dim=2)
         sequence = torch.argmax(log_probs, dim=2)
 
         return sequence, log_probs
-
-        # encode_output, _ = self.encoder(object_features=object_features,
-        #                                     position_features=position_features)
-
-        # batch_size = encode_output.size(0)
-        # input_caption = torch.zeros(batch_size, self.max_length) \
-        #                          .long() \
-        #                          .to(self.device)
-        # log_probs = torch.zeros(batch_size, self.max_length-1, self.num_vocab) \
-        #                          .to(self.device)
-
-        # input_caption[:, 0] = 1
-        # for t in range(self.max_length-1):
-        #     decode_input = input_caption[:, :t+1].clone().long()
-        #     context_attention_mask = self.get_attention_key_pad_mask(k=position_features,
-        #                                                              q=decode_input)
-
-        #     decode_output, _, _= self.decoder(caption_vector=decode_input,
-        #                                       encode_output=encode_output,
-        #                                       context_attention_mask=context_attention_mask)
-
-        #     output = decode_output[:, t]
-        #     output = self.classifer(output)
-
-        #     log_prob = self.softmax(output)
-        #     log_probs[:, t] = log_prob
-
-        #     seq = torch.argmax(log_prob, dim=1)
-        #     input_caption[:, t+1] = seq
-
-        # return input_caption[:, 1:], log_probs
 
 
     def generate_caption_vector(self, object_features,
