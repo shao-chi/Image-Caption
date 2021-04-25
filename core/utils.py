@@ -130,4 +130,9 @@ def write_scores(scores, path, epoch, split):
         f.write(f'Epoch {epoch}\n')
 
         for score_name, score in scores.items():
-            f.write(f"{score_name}: {score}\n")
+            if isinstance(score, dict):
+                for split, value in score.items():
+                    f.write(f"{split}_{score_name}: {value}\n")
+
+            else:
+                f.write(f"{score_name}: {score}\n")

@@ -85,7 +85,8 @@ class Transformer(nn.Module):
                                            context_attention_mask=context_attention_mask)
         output = self.classifer(decode_output)
 
-        loss = self.loss(output.view(-1, output.size(2)), target_caption)
+        loss = {}
+        loss['loss'] = self.loss(output.view(-1, output.size(2)), target_caption)
 
         return loss
 

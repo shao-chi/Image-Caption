@@ -61,6 +61,11 @@ DROPOUT = 0.3
 LEARNING_RATE = 0.00005
 LOG_PATH = f'./logs_{OUTPUT_NAME}/'
 
+if CAPTION_MODEL.find('RL') != -1:
+    WRITE_LOG = ['loss', 'language_model_loss', 'structure_loss', 'reward']
+else:
+    WRITE_LOG = ['loss']
+
 
 if OUTPUT_NAME == 'RL_maxlen49_36obj_1wordCount_256_25b_32h_move':
     assert NUM_OBJECT == 36

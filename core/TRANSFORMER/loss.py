@@ -59,8 +59,8 @@ class ReinforcementLearningLoss(nn.Module):
 
         out['loss'] = (1 - self.structure_loss_weight) * language_model_loss + \
                         self.structure_loss_weight * structure_loss['loss']
-        out['lm_loss'] = language_model_loss
-        out['struc_loss'] = structure_loss['loss']
+        out['language_model_loss'] = language_model_loss
+        out['structure_loss'] = structure_loss['loss']
         out['reward'] = structure_loss['reward']
         
         return out

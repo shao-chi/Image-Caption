@@ -91,6 +91,7 @@ class TRANSFORMER(MODEL_init):
         loss = self.model(object_features=batch_features.to(DEVICE),
                           position_features=batch_positions.to(DEVICE),
                           target_caption=batch_captions.to(DEVICE))
+        loss = loss['loss']
 
         loss.backward()
         self.optimizer.step()
@@ -102,7 +103,7 @@ class TRANSFORMER(MODEL_init):
             return \
                 self.model(object_features=object_features.to(DEVICE),
                            position_features=position_features.to(DEVICE),
-                           target_caption=target_caption.to(DEVICE)).cpu().item()
+                           target_caption=target_caption.to(DEVICE)).cpu()
 
     def generate_caption(self, object_features,
                                position_features,
@@ -204,9 +205,9 @@ class SelfCriticNetwork(MODEL_init):
                                            target_caption=target_caption.to(DEVICE))
             sample_sequence, sample_logprobs = self.policy_net.sample(output=model_output)
             loss = self.loss(model_output=model_output.cpu(),
-                            sample_sequence=sample_sequence.cpu(),
-                            sample_logprobs=sample_logprobs.cpu(),
-                            target=target_caption)
+                             sample_sequence=sample_sequence.cpu(),
+                             sample_logprobs=sample_logprobs.cpu(),
+                             target=target_caption)
 
             return loss
 

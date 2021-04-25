@@ -6,7 +6,6 @@ import fire
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import numpy as np
 
@@ -15,6 +14,7 @@ from core.config import *
 from core.dataset import TrainDataset, TestDataset
 from core.utils import save_pickle, write_scores
 from core.evaluations import evaluate
+from core.logger import TensorBoard_Writer
 
 if CAPTION_MODEL == 'Transformer':
     MODEL = TRANSFORMER()
@@ -23,7 +23,7 @@ elif CAPTION_MODEL == 'RL_Transformer':
 
 
 def train():
-    writer = SummaryWriter(LOG_PATH)
+    writer = TensorBoard_Writer(LOG_PATH)
 
     model_dir = os.path.join(OUTPUT_PATH, 'model/')
     if not os.path.exists(model_dir):
@@ -42,154 +42,19 @@ def train():
                                   batch_size=BATCH_SIZE,
                                   shuffle=False)
 
-    n_iter = len(train_dataloader)
-    for features, positions, captions, _ in train_dataloader:
-        eval_t_features = features
-        eval_t_positions = positions
-        eval_t_captions = captions
+    for (t_features, t_positions, t_captions, _), \
+        (v_features, v_positions, v_captions, _) \
+            in zip(train_dataloader, valid_dataloader):
+        eval_t_features = t_features
+        eval_t_positions = t_positions
+        eval_t_captions = t_captions
+        
+        eval_v_features = v_features
+        eval_v_positions = v_positions
+        eval_v_captions = v_captions
         break
-    for features, positions, captions, _ in valid_dataloader:
-        eval_v_features = features
-        eval_v_positions = positions
-        eval_v_captions = captions
-        break
-
-    for epoch in range(1, NUM_EPOCH+1):
-        print(f'Epoch {epoch}')
-
-        for i, (batch_features,
-                batch_positions,
-                batch_captions,
-                batch_image_idxs) in enumerate(tqdm(train_dataloader)):
-            MODEL.train_step(batch_features=batch_features,
-                             batch_positions=batch_positions,
-                             batch_captions=batch_captions)
-            
-            if i % 20 == 0:
-                t_loss = MODEL.compute_loss(object_features=eval_t_features,
-                                            position_features=eval_t_positions,
-                                            target_caption=eval_t_captions)
-                v_loss = MODEL.compute_loss(object_features=eval_v_features,
-                                            position_features=eval_v_positions,
-                                            target_caption=eval_v_captions)
-                writer.add_scalars('LOSS/BATCH',
-                                   {'Train': t_loss, 'Valid': v_loss},
-                                    i+n_iter*(epoch-1))
-            
-            if (i+1) % 2500 == 0:
-                sample_caption, _ = MODEL.generate_caption(
-                                    object_features=batch_features[:1],
-                                    position_features=batch_positions[:1])
-
-                writer.add_text('CAPTION/Sample_caption',
-                                sample_caption[0],
-                                i+n_iter*(epoch-1))
-                print('\nSample caption: ', sample_caption[0])
-
-                ground_truths = \
-                    train_dataset.data['captions'] \
-                        [train_dataset.data['image_idxs'] == batch_image_idxs[0].item()]
-                ground_truths = MODEL.decode_captions(ground_truths)
-                truths = ''
-                for j, truth in enumerate(ground_truths):
-                    truths += (truth + '\n')
-                    print(f'Ground truth {j+1}: {truth}')
-                
-                writer.add_text('CAPTION/Ground_truth',
-                                truths,
-                                i+n_iter*(epoch-1))
-
-        # evaluation
-        train_loss = 0
-
-        for i, (batch_features,
-                batch_positions,
-                batch_captions, _) in enumerate(train_dataloader):
-
-            if i < len(valid_dataloader):
-                train_loss += MODEL.compute_loss(object_features=batch_features,
-                                                 position_features=batch_positions,
-                                                 target_caption=batch_captions)
-                
-            else:
-                break
-
-        valid_loss = 0
-        valid_caption = [''] * valid_dataset.len_image
-        for batch_features, \
-                batch_positions, \
-                batch_captions, \
-                batch_image_idxs in valid_dataloader:
-            valid_loss += MODEL.compute_loss(object_features=batch_features,
-                                             position_features=batch_positions,
-                                             target_caption=batch_captions)
-
-            captions, _ = MODEL.generate_caption(object_features=batch_features,
-                                                 position_features=batch_positions)
-
-            for i, (idx, caption) in enumerate(zip(batch_image_idxs, captions)):
-                valid_caption[idx] = caption
-
-        save_pickle(valid_caption,
-                    str(os.path.join(target_dir, "valid.candidate.captions.pkl")))
-        scores = evaluate(target_dir=target_dir,
-                          data_path=DATA_PATH,
-                          split='valid',
-                          get_scores=True)
-
-        train_loss = train_loss / len(valid_dataloader)
-        valid_loss = valid_loss / len(valid_dataloader)
-        print(f"\nTraining LOSS: {train_loss}")
-        print(f"Validation LOSS: {valid_loss}")
-
-        scores['train_loss'] = train_loss
-        scores['valid_loss'] = valid_loss
-        writer.add_scalars('LOSS/EPOCH', {'Train': scores['train_loss'],
-                                          'Valid': scores['valid_loss']}, epoch)
-
-        write_scores(scores=scores, path=OUTPUT_PATH, epoch=epoch, split='valid')
-
-        for score_name, score in scores.items():
-            if score_name not in ['train_loss', 'valid_loss']:
-                writer.add_scalar(f'EVALUATION/{score_name}', score, epoch)
-
-        MODEL.save(path=os.path.join(model_dir, f'model_{epoch}.pt'))
-
-    writer.close()
-
-
-def train_RL():
-    writer = SummaryWriter(LOG_PATH)
-
-    model_dir = os.path.join(OUTPUT_PATH, 'model/')
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
-
-    target_dir = os.path.join(DATA_PATH, f"valid/{OUTPUT_NAME}/")
-    if not os.path.exists(target_dir):
-        os.makedirs(target_dir)
-
-    train_dataset = TrainDataset(data_path=DATA_PATH, split='train')
-    train_dataloader = DataLoader(train_dataset,
-                                  batch_size=BATCH_SIZE,
-                                  shuffle=True)
-    valid_dataset = TrainDataset(data_path=DATA_PATH, split='valid')
-    valid_dataloader = DataLoader(valid_dataset,
-                                  batch_size=BATCH_SIZE,
-                                  shuffle=False)
 
     n_iter = len(train_dataloader)
-    for features, positions, captions, _ in train_dataloader:
-        eval_t_features = features
-        eval_t_positions = positions
-        eval_t_captions = captions
-        break
-    for features, positions, captions, _ in valid_dataloader:
-        eval_v_features = features
-        eval_v_positions = positions
-        eval_v_captions = captions
-        break
-
     for epoch in range(1, NUM_EPOCH+1):
         print(f'Epoch {epoch}')
 
@@ -202,37 +67,25 @@ def train_RL():
                              batch_captions=batch_captions)
             
             if (i+1) % 100 == 0:
-                t_loss = MODEL.compute_loss(object_features=eval_t_features,
-                                            position_features=eval_t_positions,
-                                            target_caption=eval_t_captions)
-                v_loss = MODEL.compute_loss(object_features=eval_v_features,
-                                            position_features=eval_v_positions,
-                                            target_caption=eval_v_captions)
-                writer.add_scalars('REWARD/BATCH',
-                                        {'Train': t_loss['reward'].mean(),
-                                         'Valid': v_loss['reward'].mean()},
-                                    i+n_iter*(epoch-1))
-                writer.add_scalars('LOSS/BATCH',
-                                        {'Train': t_loss['loss'].mean(),
-                                         'Valid': v_loss['loss'].mean()},
-                                   i+n_iter*(epoch-1))
-                writer.add_scalars('LANGUAGE_MODEL_LOSS/BATCH',
-                                        {'Train': t_loss['lm_loss'].mean(),
-                                         'Valid': v_loss['lm_loss'].mean()},
-                                   i+n_iter*(epoch-1))
-                writer.add_scalars('STRUCTURE_LOSS/BATCH',
-                                        {'Train': t_loss['struc_loss'].mean(),
-                                         'Valid': v_loss['struc_loss'].mean()},
-                                   i+n_iter*(epoch-1))
+                train_loss = MODEL.compute_loss(object_features=eval_t_features,
+                                                position_features=eval_t_positions,
+                                                target_caption=eval_t_captions)
+                valid_loss = MODEL.compute_loss(object_features=eval_v_features,
+                                                position_features=eval_v_positions,
+                                                target_caption=eval_v_captions)
+
+                logs = {}
+                for key in WRITE_LOG:
+                    logs[key] = {'train': train_loss[key].mean().item(),
+                                 'valid': valid_loss[key].mean().item()}
+
+                writer.write_batch(logs=logs, step=i+n_iter*(epoch-1))
             
             if (i+1) % 2500 == 0:
                 sample_caption, _ = MODEL.generate_caption(
                                         object_features=batch_features[:1],
                                         position_features=batch_positions[:1])
 
-                writer.add_text('CAPTION/Sample_caption',
-                                sample_caption[0],
-                                i+n_iter*(epoch-1))
                 print('\nSample caption: ', sample_caption[0])
 
                 ground_truths = \
@@ -244,54 +97,39 @@ def train_RL():
                     truths += (truth + '\n')
                     print(f'Ground truth {j+1}: {truth}')
                 
-                writer.add_text('CAPTION/Ground_truth',
-                                truths,
-                                i+n_iter*(epoch-1))
+                writer.write_text(output=sample_caption[0],
+                                  truths=truths,
+                                  step=i+n_iter*(epoch-1))
 
         # evaluation
-        train_loss = 0
-        train_lm_loss = 0
-        train_reward = 0
-        train_struc_loss = 0
-        for i, (batch_features,
-                batch_positions,
-                batch_captions, _) in enumerate(train_dataloader):
-
-            if i < len(valid_dataloader):
-                loss = MODEL.compute_loss(object_features=batch_features,
-                                          position_features=batch_positions,
-                                          target_caption=batch_captions)
-                train_loss += loss['loss'].mean()
-                train_lm_loss += loss['lm_loss'].mean()
-                train_reward += loss['reward'].mean()
-                train_struc_loss += loss['struc_loss'].mean()
-                
-            else:
-                break
-
-        valid_loss = 0
-        valid_lm_loss = 0
-        valid_reward = 0
-        valid_struc_loss = 0
         valid_caption = [''] * valid_dataset.len_image
-        for batch_features, \
-                batch_positions, \
-                batch_captions, \
-                batch_image_idxs in valid_dataloader:
+        logs = {key: {'train': 0, 'valid': 0} for key in WRITE_LOG}
+
+        for i, ((batch_t_features, batch_t_positions, batch_t_captions, _), \
+                (batch_v_features, batch_v_positions, batch_v_captions, batch_v_image_idxs)) \
+                    in enumerate(zip(train_dataloader, valid_dataloader)):
+
+            train_loss = MODEL.compute_loss(object_features=batch_t_features,
+                                            position_features=batch_t_positions,
+                                            target_caption=batch_t_captions)
+                
+            valid_loss = MODEL.compute_loss(object_features=batch_v_features,
+                                            position_features=batch_v_positions,
+                                            target_caption=batch_v_captions)
             
-            loss = MODEL.compute_loss(object_features=batch_features,
-                                      position_features=batch_positions,
-                                      target_caption=batch_captions)
-            valid_loss += loss['loss'].mean()
-            valid_lm_loss += loss['lm_loss'].mean()
-            valid_reward += loss['reward'].mean()
-            valid_struc_loss += loss['struc_loss'].mean()
+            for key in WRITE_LOG:
+                logs[key]['train'] += train_loss[key].mean().item()
+                logs[key]['valid'] += valid_loss[key].mean().item()
 
-            captions, _ = MODEL.generate_caption(object_features=batch_features,
-                                                 position_features=batch_positions)
+            captions, _ = MODEL.generate_caption(object_features=batch_v_features,
+                                                 position_features=batch_v_positions)
 
-            for i, (idx, caption) in enumerate(zip(batch_image_idxs, captions)):
+            for idx, caption in zip(batch_v_image_idxs, captions):
                 valid_caption[idx] = caption
+
+        for key in WRITE_LOG:
+            logs[key]['train'] /= len(valid_dataloader)
+            logs[key]['valid'] /= len(valid_dataloader)
 
         save_pickle(valid_caption,
                     str(os.path.join(target_dir, "valid.candidate.captions.pkl")))
@@ -300,46 +138,15 @@ def train_RL():
                           split='valid',
                           get_scores=True)
 
-        train_loss /= len(valid_dataloader)
-        valid_loss /= len(valid_dataloader)
-        print(f"\nTraining LOSS: {train_loss}")
-        print(f"Validation LOSS: {valid_loss}")
+        for key in WRITE_LOG:
+            scores[key] = logs[key]
 
-        train_lm_loss /= len(valid_dataloader)
-        valid_lm_loss /= len(valid_dataloader)
-        train_reward /= len(valid_dataloader)
-        valid_reward /= len(valid_dataloader)
-        train_struc_loss /= len(valid_dataloader)
-        valid_struc_loss /= len(valid_dataloader)
-
-        scores['train_loss'] = train_loss
-        scores['valid_loss'] = valid_loss
-        writer.add_scalars('LOSS/EPOCH', {'Train': train_loss,
-                                                 'Valid': valid_loss}, epoch)
-
-        scores['train_caption_loss'] = train_lm_loss
-        scores['valid_caption_loss'] = valid_lm_loss
-        writer.add_scalars('LANGUAGE_MODEL_LOSS/EPOCH', {'Train': train_lm_loss,
-                                                         'Valid': valid_lm_loss}, epoch)
-
-        scores['train_reward'] = train_reward
-        scores['valid_reward'] = valid_reward
-        writer.add_scalars('REWARD/EPOCH', {'Train': train_reward,
-                                            'Valid': valid_reward}, epoch)
-        
-        scores['train_structure_loss'] = train_struc_loss
-        scores['valid_structure_loss'] = valid_struc_loss
-        writer.add_scalars('STRUCTURE_LOSS/EPOCH', {'Train': train_struc_loss,
-                                                    'Valid': valid_struc_loss}, epoch)
+        print(f"\nTraining LOSS: {scores['loss']['train']}")
+        print(f"Validation LOSS: {scores['loss']['valid']}")
 
         write_scores(scores=scores, path=OUTPUT_PATH, epoch=epoch, split='valid')
 
-        for score_name, score in scores.items():
-            if score_name not in ['train_loss', 'valid_loss',
-                                  'train_reward', 'valid_reward',
-                                  'train_structure_loss', 'valid_structure_loss',
-                                  'train_caption_loss', 'valid_caption_loss']:
-                writer.add_scalar(f'EVALUATION/{score_name}', score, epoch)
+        writer.write_epoch(logs=scores, epoch=epoch)
 
         MODEL.save(path=os.path.join(model_dir, f'model_{epoch}.pt'))
 
