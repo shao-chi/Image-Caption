@@ -23,10 +23,7 @@ class MODEL_init:
         self.num_vocab = len(word_to_idx)
         self.idx_to_word = {i: w for w, i in word_to_idx.items()}
 
-        self.model = None
-        self.optimizer = torch.optim.Adam((p for p in self.model.parameters() \
-                                                if p.requires_grad),
-                                          lr=LEARNING_RATE)
+        self.model = nn.Module()
 
     def train_step(self):
         raise NotImplementedError
@@ -107,6 +104,9 @@ class TRANSFORMER(MODEL_init):
                                  device=DEVICE,
                                  move_first_image_feature=MOVE_FIRST_IMAGE_FAETURE,
                                  split_position=SPLIT_POSITION).to(DEVICE)
+        self.optimizer = torch.optim.Adam((p for p in self.model.parameters() \
+                                                if p.requires_grad),
+                                          lr=LEARNING_RATE)
 
     def train_step(self, batch_features,
                          batch_positions,
@@ -157,6 +157,9 @@ class SelfCriticNetwork(MODEL_init):
                                    move_first_image_feature=MOVE_FIRST_IMAGE_FAETURE,
                                    split_position=SPLIT_POSITION).to(DEVICE)
         self.loss = ReinforcementLearningLoss()
+        self.optimizer = torch.optim.Adam((p for p in self.model.parameters() \
+                                                if p.requires_grad),
+                                          lr=LEARNING_RATE)
 
         
     def train_step(self, batch_features,
