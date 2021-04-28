@@ -30,14 +30,22 @@ class FocalLoss(nn.modules.loss._WeightedLoss):
 
 
 class ReinforcementLearningLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, structure_loss_weight,
+                       cider_reward_weight,
+                       bleu_reward_weight,
+                       entropy_reward_weight,
+                       self_cider_reward_weight):
         super(ReinforcementLearningLoss, self).__init__()
 
         self.criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
         self.reward_criterion = RewardCriterion()
-        self.structure_criterion = StructureCriterion()
+        self.structure_criterion = StructureCriterion(
+                                        cider_reward_weight=cider_reward_weight,
+                                        bleu_reward_weight=bleu_reward_weight,
+                                        entropy_reward_weight=entropy_reward_weight,
+                                        self_cider_reward_weight=self_cider_reward_weight)
         
-        self.structure_loss_weight = 0.5
+        self.structure_loss_weight = structure_loss_weight
 
     def forward(self, model_output, sample_sequence, sample_logprobs, target):
         target = target[:, 1:].clone().long().contiguous()
@@ -88,21 +96,24 @@ class StructureCriterion(nn.Module):
     This loss is inspired by Classical Structured Prediction Losses for 
     Sequence to Sequence Learning (Edunov et al., 2018).
     """
-    def __init__(self):
+    def __init__(self, cider_reward_weight,
+                       bleu_reward_weight,
+                       entropy_reward_weight,
+                       self_cider_reward_weight):
         super(StructureCriterion, self).__init__()
 
         word_to_idx = pickle.load(open(WORD_TO_IDX_PATH, 'rb'))
         self.idx_to_word = {i: w for w, i in word_to_idx.items()}
 
-        self.cider_reward_weight = 0.5
+        self.cider_reward_weight = cider_reward_weight
         self.ciderD_scorer = CiderD(df='coco-val')
         self.cider_scorer = Cider(df='coco-val')
 
-        self.bleu_reward_weight = 0.5
+        self.bleu_reward_weight = bleu_reward_weight
         self.bleu_scorer = Bleu(4, print_=False)
 
-        self.entropy_reward_weight = 0.5
-        self.self_cider_reward_weight = 0.5
+        self.entropy_reward_weight = entropy_reward_weight
+        self.self_cider_reward_weight = self_cider_reward_weight
 
     def forward(self, output, sequence, target):
         out = {}

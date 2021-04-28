@@ -18,7 +18,7 @@ SPLIT_POSITION = False
 ENCODE_MASK = True
 
 MODEL_NAME = 'maxlen49_36obj_1wordCount'
-OUTPUT_NAME = 'RL_maxlen49_36obj_1wordCount_256_25b_32h_move'
+OUTPUT_NAME = 'RL_maxlen49_36obj_1wordCount_256_25b_32h_move_2'
 print('OUTPUT_NAME: ', OUTPUT_NAME)
 
 DATA_PATH = f'./data/{MODEL_NAME}'
@@ -74,6 +74,46 @@ if OUTPUT_NAME == 'RL_maxlen49_36obj_1wordCount_256_25b_32h_move':
     assert CAPTION_MODEL == 'RL_Transformer'
     assert not SPLIT_POSITION
     assert ENCODE_MASK
+
+    # RL Loss Weight
+    STRUCTURE_LOSS_WEIGHT = 0.5
+    CIDER_REWARD_WEIGHT = 0.5
+    BLEU_REWARD_WEIGHT = 0.5
+    ENTROPY_REWARD_WEIGHT = 0.5
+    SELF_CIDER_REWARD_WEIGHT = 0.5
+    
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'RL_maxlen49_36obj_1wordCount_256_25b_32h_move_2':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'RL_Transformer'
+    assert not SPLIT_POSITION
+    assert ENCODE_MASK
+
+    # RL Loss Weight
+    STRUCTURE_LOSS_WEIGHT = 0.7
+    CIDER_REWARD_WEIGHT = 1
+    BLEU_REWARD_WEIGHT = 1
+    ENTROPY_REWARD_WEIGHT = 1
+    SELF_CIDER_REWARD_WEIGHT = 1
     
     # encoder
     ENCODE_INPUT_SIZE = 256

@@ -156,7 +156,12 @@ class SelfCriticNetwork(MODEL_init):
                                    device=DEVICE,
                                    move_first_image_feature=MOVE_FIRST_IMAGE_FAETURE,
                                    split_position=SPLIT_POSITION).to(DEVICE)
-        self.loss = ReinforcementLearningLoss()
+        self.loss = ReinforcementLearningLoss(
+                            structure_loss_weight=STRUCTURE_LOSS_WEIGHT,
+                            cider_reward_weight=CIDER_REWARD_WEIGHT,
+                            bleu_reward_weight=BLEU_REWARD_WEIGHT,
+                            entropy_reward_weight=ENTROPY_REWARD_WEIGHT,
+                            self_cider_reward_weight=SELF_CIDER_REWARD_WEIGHT)
         self.optimizer = torch.optim.Adam((p for p in self.model.parameters() \
                                                 if p.requires_grad),
                                           lr=LEARNING_RATE)
