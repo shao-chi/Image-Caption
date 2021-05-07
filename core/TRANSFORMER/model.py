@@ -4,7 +4,6 @@ import numpy as np
 
 from core.TRANSFORMER.modules import EncoderBlock, DecoderBlock, FeedForward
 from core.TRANSFORMER.loss import FocalLoss
-from core.config import PAD_IDX, OUTPUT_NAME, ENCODE_MASK
 
 class Transformer(nn.Module):
 
@@ -12,6 +11,9 @@ class Transformer(nn.Module):
                        encode_dim_positions,
                        encode_dim_features,
                        device,
+                       output_name,
+                       encode_mask=False,
+                       pad_idx=0,
                        dropout=0.2,
 
                        encode_input_size=512,
@@ -36,6 +38,7 @@ class Transformer(nn.Module):
         self.max_length = max_length
         self.device = device
         self.num_vocab = num_vocab
+        self.pad_idx = pad_idx
 
         self.encoder = Encoder(dim_positions=encode_dim_positions,
                                dim_features=encode_dim_features,
@@ -46,7 +49,8 @@ class Transformer(nn.Module):
                                input_size=encode_input_size,
                                hidden_size=encode_hidden_size,
                                dropout=dropout,
-                               split_position=split_position)
+                               split_position=split_position,
+                               encode_mask=encode_mask)
         self.decoder = Decoder(num_vocab=num_vocab,
                                max_length=max_length,
                                dim_word_embedding=dim_word_embedding,
@@ -63,10 +67,10 @@ class Transformer(nn.Module):
 
         self.softmax = nn.Softmax(dim=1)
         
-        if OUTPUT_NAME.find('FocalLoss') != -1:
-            self.loss = FocalLoss(ignore_index=PAD_IDX)
+        if output_name.find('FocalLoss') != -1:
+            self.loss = FocalLoss(ignore_index=self.pad_idx)
         else:
-            self.loss = nn.CrossEntropyLoss(ignore_index=PAD_IDX, reduction='mean')
+            self.loss = nn.CrossEntropyLoss(ignore_index=self.pad_idx, reduction='mean')
 
 
     def forward(self, object_features,
@@ -213,9 +217,11 @@ class Encoder(nn.Module):
                        input_size,
                        hidden_size,
                        dropout,
-                       split_position):
+                       split_position,
+                       encode_mask):
         super(Encoder, self).__init__()
 
+        self.encode_mask = encode_mask
         self.split_position = split_position
         if split_position:
             self.object_embedding = nn.Linear(dim_positions-4, input_size, bias=False)
@@ -263,7 +269,7 @@ class Encoder(nn.Module):
         
         attention_list = []
         for block in self.encoder:
-            if ENCODE_MASK:
+            if self.encode_mask:
                 output, attention = block(encode_input=output,
                                           non_pad_mask=non_pad_mask,
                                           attention_mask=self_attention_mask)
@@ -329,7 +335,7 @@ class Decoder(nn.Module):
 
         self.word_embedding = nn.Embedding(num_embeddings=num_vocab,
                                            embedding_dim=dim_word_embedding,
-                                           padding_idx=PAD_IDX)
+                                           padding_idx=self.pad_idx)
         self.word_embedding_linear = nn.Linear(in_features=dim_word_embedding,
                                                out_features=input_size,
                                                bias=False)
@@ -403,7 +409,7 @@ class Decoder(nn.Module):
         assert k.size(0) == q.size(0)
 
         batch_size = k.size(0)
-        mask = k.eq(PAD_IDX)
+        mask = k.eq(self.pad_idx)
         mask = mask.unsqueeze(1).expand(batch_size, q.size(1), k.size(1))  # b x lq x lk
 
         return mask
@@ -424,7 +430,7 @@ class Decoder(nn.Module):
     def get_non_pad_mask(self, sequence):
         assert sequence.dim() == 2
 
-        return sequence.ne(PAD_IDX).type(torch.float).unsqueeze(-1)
+        return sequence.ne(self.pad_idx).type(torch.float).unsqueeze(-1)
 
 
 class PositionalEncoding(nn.Module):

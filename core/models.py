@@ -102,6 +102,9 @@ class TRANSFORMER(MODEL_init):
                                  decode_num_heads=DECODE_NUM_HEADS,
                                  dropout=DROPOUT,
                                  device=DEVICE,
+                                 output_name=OUTPUT_NAME,
+                                 encode_mask=ENCODE_MASK,
+                                 pad_idx=PAD_IDX,
                                  move_first_image_feature=MOVE_FIRST_IMAGE_FAETURE,
                                  split_position=SPLIT_POSITION).to(DEVICE)
         self.optimizer = torch.optim.Adam((p for p in self.model.parameters() \
@@ -157,6 +160,8 @@ class SelfCriticNetwork(MODEL_init):
                                    move_first_image_feature=MOVE_FIRST_IMAGE_FAETURE,
                                    split_position=SPLIT_POSITION).to(DEVICE)
         self.loss = ReinforcementLearningLoss(
+                            word_to_idx_path=WORD_TO_IDX_PATH,
+                            pad_idx=PAD_IDX,
                             structure_loss_weight=STRUCTURE_LOSS_WEIGHT,
                             cider_reward_weight=CIDER_REWARD_WEIGHT,
                             bleu_reward_weight=BLEU_REWARD_WEIGHT,

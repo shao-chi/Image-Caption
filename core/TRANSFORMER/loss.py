@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from core.config import PAD_IDX, WORD_TO_IDX_PATH
 from core.metrics.cider.cider import Cider
 from core.metrics.ciderD.ciderD import CiderD
 from core.metrics.bleu.bleu import Bleu
@@ -34,12 +33,15 @@ class ReinforcementLearningLoss(nn.Module):
                        cider_reward_weight,
                        bleu_reward_weight,
                        entropy_reward_weight,
-                       self_cider_reward_weight):
+                       self_cider_reward_weight,
+                       word_to_idx_path,
+                       pad_idx=0):
         super(ReinforcementLearningLoss, self).__init__()
 
-        self.criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
+        self.criterion = nn.CrossEntropyLoss(ignore_index=pad_idx)
         self.reward_criterion = RewardCriterion()
         self.structure_criterion = StructureCriterion(
+                                        word_to_idx_path=word_to_idx_path,
                                         cider_reward_weight=cider_reward_weight,
                                         bleu_reward_weight=bleu_reward_weight,
                                         entropy_reward_weight=entropy_reward_weight,
@@ -96,13 +98,14 @@ class StructureCriterion(nn.Module):
     This loss is inspired by Classical Structured Prediction Losses for 
     Sequence to Sequence Learning (Edunov et al., 2018).
     """
-    def __init__(self, cider_reward_weight,
+    def __init__(self, word_to_idx_path,
+                       cider_reward_weight,
                        bleu_reward_weight,
                        entropy_reward_weight,
                        self_cider_reward_weight):
         super(StructureCriterion, self).__init__()
 
-        word_to_idx = pickle.load(open(WORD_TO_IDX_PATH, 'rb'))
+        word_to_idx = pickle.load(open(word_to_idx_path, 'rb'))
         self.idx_to_word = {i: w for w, i in word_to_idx.items()}
 
         self.cider_reward_weight = cider_reward_weight

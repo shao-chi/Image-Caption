@@ -5,7 +5,6 @@ import numpy as np
 import pickle
 
 from core.TRANSFORMER.model import Encoder, Decoder
-from core.config import PAD_IDX, WORD_TO_IDX_PATH
 
 
 class PolicyNetwork(nn.Module):
@@ -14,6 +13,7 @@ class PolicyNetwork(nn.Module):
                        encode_dim_positions,
                        encode_dim_features,
                        device,
+                       pad_idx=0,
                        dropout=0.2,
 
                        encode_input_size=512,
@@ -38,6 +38,7 @@ class PolicyNetwork(nn.Module):
         self.max_length = max_length
         self.device = device
         self.num_vocab = num_vocab
+        self.pad_idx = pad_idx
 
         self.encoder = Encoder(dim_positions=encode_dim_positions,
                                dim_features=encode_dim_features,
@@ -204,4 +205,4 @@ class PolicyNetwork(nn.Module):
     def get_non_pad_mask(self, sequence):
         assert sequence.dim() == 2
 
-        return sequence.ne(PAD_IDX).type(torch.float).unsqueeze(-1)
+        return sequence.ne(self.pad_idx).type(torch.float).unsqueeze(-1)
