@@ -76,8 +76,8 @@ def train():
 
                 logs = {}
                 for key in WRITE_LOG:
-                    logs[key] = {'train': train_loss[key].mean().item(),
-                                 'valid': valid_loss[key].mean().item()}
+                    logs[key] = {'train': train_loss[key].cpu().mean().item(),
+                                 'valid': valid_loss[key].cpu().mean().item()}
 
                 writer.write_batch(logs=logs, step=i+n_iter*(epoch-1))
             

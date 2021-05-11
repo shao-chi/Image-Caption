@@ -15,6 +15,7 @@ class PolicyNetwork(nn.Module):
                        device,
                        pad_idx=0,
                        dropout=0.2,
+                       encode_mask=False,
 
                        encode_input_size=512,
                        encode_q_k_dim=512,
@@ -32,7 +33,8 @@ class PolicyNetwork(nn.Module):
                        decode_num_heads=8,
                        
                        move_first_image_feature=False,
-                       split_position=False):
+                       split_position=False,
+                       split_image_objects=False):
         super(PolicyNetwork, self).__init__()
 
         self.max_length = max_length
@@ -49,7 +51,9 @@ class PolicyNetwork(nn.Module):
                                input_size=encode_input_size,
                                hidden_size=encode_hidden_size,
                                dropout=dropout,
-                               split_position=split_position)
+                               split_position=split_position,
+                               split_image_objects=split_image_objects,
+                               encode_mask=encode_mask)
         self.decoder = Decoder(num_vocab=num_vocab,
                                max_length=max_length,
                                dim_word_embedding=dim_word_embedding,
@@ -60,7 +64,8 @@ class PolicyNetwork(nn.Module):
                                input_size=decode_input_size,
                                hidden_size=decode_hidden_size,
                                dropout=dropout,
-                               move_first_image_feature=move_first_image_feature)
+                               move_first_image_feature=move_first_image_feature,
+                               pad_idx=pad_idx)
         self.classifer = nn.Linear(decode_input_size, num_vocab)
         nn.init.xavier_normal_(self.classifer.weight)
 

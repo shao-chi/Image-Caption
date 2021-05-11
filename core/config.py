@@ -13,12 +13,13 @@ IMAGE_MODEL = 'YOLOv5'
 # CAPTION_MODEL = 'Transformer'
 CAPTION_MODEL = 'RL_Transformer'
 
-MOVE_FIRST_IMAGE_FAETURE = True
+MOVE_FIRST_IMAGE_FAETURE = False
 SPLIT_POSITION = False
 ENCODE_MASK = True
+SPLIT_IMAGE_OBJECTS = True
 
 MODEL_NAME = 'maxlen49_36obj_1wordCount'
-OUTPUT_NAME = 'RL_maxlen49_36obj_1wordCount_256_25b_32h_move_2'
+OUTPUT_NAME = 'RL_maxlen49_36obj_1wordCount_256_25b_32h_split_img_obj'
 print('OUTPUT_NAME: ', OUTPUT_NAME)
 
 DATA_PATH = f'./data/{MODEL_NAME}'
@@ -31,7 +32,7 @@ print('Model :', OUTPUT_NAME)
 if torch.cuda.is_available():
     # set_start_method('spawn', force=True)
 
-    device_name = "cuda:0"
+    device_name = "cuda:2"
     resnet_device = "cuda:1"
     frcnn_device = "cuda:1"
 
@@ -58,13 +59,74 @@ elif IMAGE_MODEL == 'FasterRCNN':
 NUM_EPOCH = 1000
 BATCH_SIZE = 32
 DROPOUT = 0.3
-LEARNING_RATE = 0.00005
+LEARNING_RATE = 0.0005
 LOG_PATH = f'./logs_{OUTPUT_NAME}/'
 
 if CAPTION_MODEL.find('RL') != -1:
     WRITE_LOG = ['loss', 'language_model_loss', 'structure_loss', 'reward']
 else:
     WRITE_LOG = ['loss']
+
+
+if OUTPUT_NAME == 'RL_maxlen49_36obj_1wordCount_256_25b_32h_split_img_obj':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'RL_Transformer'
+    assert not SPLIT_POSITION
+    assert ENCODE_MASK
+    assert SPLIT_IMAGE_OBJECTS
+
+    # RL Loss Weight
+    STRUCTURE_LOSS_WEIGHT = 0.5
+    CIDER_REWARD_WEIGHT = 1
+    BLEU_REWARD_WEIGHT = 1
+    ENTROPY_REWARD_WEIGHT = 1
+    SELF_CIDER_REWARD_WEIGHT = 1
+    
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
+
+
+if OUTPUT_NAME == 'maxlen49_36obj_1wordCount_256_25b_32h_split_img_obj':
+    assert NUM_OBJECT == 36
+    assert IMAGE_MODEL == 'YOLOv5'
+    assert not MOVE_FIRST_IMAGE_FAETURE
+    assert CAPTION_MODEL == 'Transformer'
+    assert not SPLIT_POSITION
+    assert ENCODE_MASK
+    assert SPLIT_IMAGE_OBJECTS
+    
+    # encoder
+    ENCODE_INPUT_SIZE = 256
+    ENCODE_Q_K_DIM = 256
+    ENCODE_V_DIM = 256
+    ENCODE_HIDDEN_SIZE = 256
+    ENCODE_NUM_BLOCKS = 2
+    ENCODE_NUM_HEADS = 32
+
+    # decoder
+    DIM_WORD_EMBEDDING = 256
+    DECODE_INPUT_SIZE = 256
+    DECODE_Q_K_DIM = 256
+    DECODE_V_DIM = 256
+    DECODE_HIDDEN_SIZE = 256
+    DECODE_NUM_BLOCKS = 5
+    DECODE_NUM_HEADS = 32
 
 
 if OUTPUT_NAME == 'RL_maxlen49_36obj_1wordCount_256_25b_32h_move':
